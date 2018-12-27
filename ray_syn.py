@@ -7,6 +7,7 @@ import ray
 import ray_model as model
 from quantizer_identical import IdenticalQuantizer
 from quantizer_scalar import ScalarQuantizer
+from quantizer_codebook import CodebookQuantizer
 
 
 Quantizer = None
@@ -16,9 +17,8 @@ parser.add_argument("--num-workers", default=4, type=int,
                     help="The number of workers to use.")
 parser.add_argument("--redis-address", default=None, type=str,
                     help="The Redis address of the cluster.")
-parser.add_argument("--quantizer", default='identical', type=str,
+parser.add_argument("--quantizer", default='codebook', type=str,
                     help="Compressor for gradient.")
-
 
 
 @ray.remote
@@ -57,6 +57,8 @@ if __name__ == "__main__":
         Quantizer = IdenticalQuantizer
     elif args.quantizer.lower() == 'scalar':
         Quantizer = ScalarQuantizer
+    elif args.quantizer.lower() == 'codebook':
+        Quantizer = CodebookQuantizer
     else:
         assert False
 
