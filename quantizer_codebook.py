@@ -2,11 +2,48 @@ import numpy as np
 import tensorflow as tf
 from vecs_io import fvecs_read
 from scipy.cluster.vq import vq
-import math
-import warnings
+
+
+def normalize(vecs):
+    norms = np.linalg.norm(vecs, axis=1)
+    norms_matrix = norms[:, np.newaxis]
+    normalized_vecs = np.divide(vecs, norms_matrix, out=np.zeros_like(vecs), where=norms_matrix != 0)
+    # divide by zero problem
+    return norms, normalized_vecs
 
 
 class ProductNorms(object):
+    def __init__(self, size, shape):
+        self.Ks = 256
+        self.size = size
+        self.shape = shape
+        self.dim = 16 if self.size >= 16 else self.size
+        self.code_dtype = np.uint8 if self.Ks <= 2 ** 8 else (np.uint16 if self.Ks <= 2 ** 16 else np.uint32)
+
+        self.M = size // self.dim
+        assert size % self.dim == 0, \
+            "dimension of variable should be smaller than {} or dividable by {}".format(self.dim, self.dim)
+        self.codewords = fvecs_read('./codebook/angular_dim_{}_Ks_{}.fvecs'.format(self.dim, self.Ks))
+
+    def encode(self, vec):
+
+        codes = np.empty(self.M, dtype=self.code_dtype)
+        vec = vec.reshape((self.M, self.dim))
+        norms, normalized_vecs = normalize(vec)
+
+        codes[:], _ = vq(normalized_vecs, self.codewords)
+        return [norms, codes]
+
+    def decode(self, signature):
+        [norms, codes] = signature
+        vec = np.empty((self.M, self.dim), dtype=np.float32)
+        vec[:, :] = self.codewords[codes[:], :]
+        vec[:, :] = (vec.transpose() * norms).transpose()
+
+        return vec.reshape(self.shape)
+
+
+class ProductNormsReminder(object):
     def __init__(self, size, shape):
         self.Ks = 256
         self.dim = 16
@@ -37,12 +74,7 @@ class ProductNorms(object):
         for m in range(self.M):
             vecs_sub = vec[self.Ds[m]: self.Ds[m + 1]]
             norms[m] = np.linalg.norm(vecs_sub)
-            if math.isnan(norms[m]):
-                warnings.warn('Nan norm here')
-                vecs_sub[:] = 0.0
-            elif norms[m] == 0.0:
-                warnings.warn('Zero norm here')
-            else:
+            if norms[m] != 0.0:
                 vecs_sub[:] = vecs_sub[:] / norms[m]
 
         codes[:-1], _ = vq(
@@ -66,6 +98,9 @@ class ProductNorms(object):
         return vec.reshape(self.shape)
 
 
+Compressor = ProductNorms
+
+
 class CodebookQuantizer(object):
     def __init__(self, placeholders):
         """
@@ -74,7 +109,7 @@ class CodebookQuantizer(object):
         self.placeholders = placeholders
         self.layers = len(placeholders)
         self.pqs = [
-            ProductNorms(
+            Compressor(
                 tf.reshape(v, [-1]).shape.as_list()[0],
                 v.shape.as_list()
             )
