@@ -17,15 +17,25 @@ class ScalarQuantizer(object):
         self.placeholders = placeholders
         self.layers = len(placeholders)
         self.s = 511
+        self.random = True
 
     def _encode(self, vec):
         """
         :param vec: numpy array
-        :return:
+        :return: norm, signs, quantized_intervals
         """
         norm = np.linalg.norm(vec)
-        quantized = np.array(vec * self.s).astype(dtype=np.int8)
-        return [norm, quantized]
+
+        scaled_vec = np.abs(vec) / norm * self.s
+        l = np.array(scaled_vec).astype(dtype=np.uint8)
+
+        if self.random:
+            # l[i] <- l[i] + 1 with probability |v_i| / ||v|| * s - l
+            probabilities = scaled_vec - l
+            l[:] += probabilities > np.random.uniform(0, 1, l.shape)
+
+        signs = np.sign(vec) > 0
+        return [norm, signs, l]
 
     def encode(self, gradient):
         """
@@ -46,11 +56,12 @@ class ScalarQuantizer(object):
         aggregator = [None for _ in range(self.layers)]
 
         for gradient in gradients:
-            for i, [norm, quantized] in enumerate(gradient):
+            for i, [norm, signs, l] in enumerate(gradient):
                 if aggregator[i] is None:
-                    aggregator[i] = quantized.astype(dtype=np.float32) * norm
+                    aggregator[i] = l.astype(dtype=np.float32) * (2 * signs - 1) * norm / self.s
                 else:
-                    aggregator[i][:] += quantized.astype(dtype=np.float32) * norm
+                    aggregator[i][:] += l.astype(dtype=np.float32) * (2 * signs - 1) * norm / self.s
+
         for agg in aggregator:
             agg[:] = agg[:] / len(gradients)
         return aggregator
