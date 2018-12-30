@@ -79,15 +79,18 @@ if __name__ == "__main__":
     i = 0
     current_weights = ps.get_weights.remote()
 
+    from myutils import Timer
     while True:
         # Compute and apply gradients.
-        gradients = [worker.compute_gradients.remote(current_weights) for worker in workers]
-        current_weights = ps.apply_gradients.remote(*gradients)
+        with Timer("Iteration {}".format(i)):
+            for _ in range(10):
+                gradients = [worker.compute_gradients.remote(current_weights) for worker in workers]
+                current_weights = ps.apply_gradients.remote(*gradients)
 
-        if i % 10 == 0:
-            # Evaluate the current model.
-            net.variables.set_flat(ray.get(current_weights))
-            test_xs, test_ys = mnist.test.next_batch(1000)
-            accuracy = net.compute_accuracy(test_xs, test_ys)
-            print("Iteration {}: accuracy is {}".format(i, accuracy))
-        i += 1
+                if i % 10 == 0:
+                    # Evaluate the current model.
+                    net.variables.set_flat(ray.get(current_weights))
+                    test_xs, test_ys = mnist.test.next_batch(1000)
+                    accuracy = net.compute_accuracy(test_xs, test_ys)
+                    print("Iteration {}: accuracy is {}".format(i, accuracy))
+                i += 1
