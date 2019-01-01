@@ -97,6 +97,12 @@ class SimpleCNN(object):
                                         self.y_: y,
                                         self.keep_prob: 1.0})
 
+    def compute_loss_accuracy(self, x, y):
+        return self.sess.run([self.cross_entropy, self.accuracy],
+                             feed_dict={self.x: x,
+                                        self.y_: y,
+                                        self.keep_prob: 1.0})
+
     def set_weights(self, variable_names, weights):
         self.variables.set_weights(dict(zip(variable_names, weights)))
 

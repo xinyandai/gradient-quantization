@@ -91,6 +91,6 @@ if __name__ == "__main__":
                     # Evaluate the current model.
                     net.variables.set_flat(ray.get(current_weights))
                     test_xs, test_ys = mnist.test.next_batch(1000)
-                    accuracy = net.compute_accuracy(test_xs, test_ys)
-                    print("Iteration {}: accuracy is {}".format(i, accuracy))
+                    loss, accuracy = net.compute_loss_accuracy(test_xs, test_ys)
+                    print("Iteration {}: loss is {}, accuracy is {}".format(i, loss, accuracy))
                 i += 1
