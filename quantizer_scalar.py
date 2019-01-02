@@ -1,6 +1,33 @@
 import numpy as np
 
 
+class ScalarCompressor(object):
+    def __init__(self):
+        self.random = True
+        self.s = 4096
+
+    def compress(self, vec):
+        """
+        :param vec: numpy array
+        :return: norm, signs, quantized_intervals
+        """
+        norm = np.linalg.norm(vec)
+
+        scaled_vec = np.abs(vec) / norm * self.s if norm > 0.0 else vec
+        l = np.array(scaled_vec).clip(0, 255).astype(dtype=np.uint8)
+
+        if self.random:
+            # l[i] <- l[i] + 1 with probability |v_i| / ||v|| * s - l
+            probabilities = scaled_vec - l
+            l[:] += probabilities > np.random.uniform(0, 1, l.shape)
+
+        signs = np.sign(vec) > 0
+        return [norm, signs, l]
+
+    def decompress(self, norm, signs, l):
+        return l.astype(dtype=np.float32) * (2 * signs.astype(dtype=np.float32) - 1) * norm / self.s
+
+
 class ScalarQuantizer(object):
     def __init__(self, placeholders):
         """
@@ -16,26 +43,7 @@ class ScalarQuantizer(object):
         """
         self.placeholders = placeholders
         self.layers = len(placeholders)
-        self.s = 511
-        self.random = True
-
-    def _encode(self, vec):
-        """
-        :param vec: numpy array
-        :return: norm, signs, quantized_intervals
-        """
-        norm = np.linalg.norm(vec)
-
-        scaled_vec = np.abs(vec) / norm * self.s
-        l = np.array(scaled_vec).astype(dtype=np.uint8)
-
-        if self.random:
-            # l[i] <- l[i] + 1 with probability |v_i| / ||v|| * s - l
-            probabilities = scaled_vec - l
-            l[:] += probabilities > np.random.uniform(0, 1, l.shape)
-
-        signs = np.sign(vec) > 0
-        return [norm, signs, l]
+        self.compressor = ScalarCompressor()
 
     def encode(self, gradient):
         """
@@ -43,7 +51,7 @@ class ScalarQuantizer(object):
         :return: python list of python list
         """
         assert self.layers == len(gradient)
-        return [self._encode(g) for g in gradient]
+        return [self.compressor.compress(g) for g in gradient]
 
     def decode(self, gradients):
         """
@@ -58,9 +66,9 @@ class ScalarQuantizer(object):
         for gradient in gradients:
             for i, [norm, signs, l] in enumerate(gradient):
                 if aggregator[i] is None:
-                    aggregator[i] = l.astype(dtype=np.float32) * (2 * signs - 1) * norm / self.s
+                    aggregator[i] = self.compressor.decompress(norm, signs, l)
                 else:
-                    aggregator[i][:] += l.astype(dtype=np.float32) * (2 * signs - 1) * norm / self.s
+                    aggregator[i][:] += self.compressor.decompress(norm, signs, l)
 
         for agg in aggregator:
             agg[:] = agg[:] / len(gradients)
