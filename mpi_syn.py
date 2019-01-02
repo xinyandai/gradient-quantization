@@ -1,10 +1,28 @@
 from mpi_worker_vqsgd import CodebookQuantizerWorker
+from mpi_worker_qsgd import ScalarQuantizerWorker
+from mpi_worker import Worker
 import logging
+import argparse
+
+parser = argparse.ArgumentParser(description="Run the synchronous All-Reduce example.")
+parser.add_argument("--quantizer", default='codebook', type=str,
+                    help="Compressor for gradient.")
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     logging.debug('initialize worker')
-    worker = CodebookQuantizerWorker()
+    args = parser.parse_args()
+
+    if args.quantizer.lower() == 'identical':
+        QuantizerWorker = Worker
+    elif args.quantizer.lower() == 'scalar':
+        QuantizerWorker = ScalarQuantizerWorker
+    elif args.quantizer.lower() == 'codebook':
+        QuantizerWorker = CodebookQuantizerWorker
+    else:
+        assert False
+    worker = QuantizerWorker()
     logging.debug('synchronize weights before running.')
     worker.syn_weights(worker.net.variables.get_flat())
     i = 0
