@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 from vecs_io import fvecs_read
 from scipy.cluster.vq import vq
+import logging
 
 
 def normalize(vecs):
@@ -12,12 +13,12 @@ def normalize(vecs):
     return norms, normalized_vecs
 
 
-class ProductNorms(object):
-    def __init__(self, size, shape):
+class CodebookCompressor(object):
+    def __init__(self, size, shape, c_dim=8):
         self.Ks = 256
         self.size = size
         self.shape = shape
-        self.dim = 8 if self.size >= 16 else self.size
+        self.dim = c_dim if self.size >= 16 else self.size
         self.code_dtype = np.uint8 if self.Ks <= 2 ** 8 else (np.uint16 if self.Ks <= 2 ** 16 else np.uint32)
 
         self.M = size // self.dim
@@ -25,80 +26,25 @@ class ProductNorms(object):
             "dimension of variable should be smaller than {} or dividable by {}".format(self.dim, self.dim)
         _, self.codewords = normalize(fvecs_read('./codebook/angular_dim_{}_Ks_{}.fvecs'.format(self.dim, self.Ks)))
 
-    def encode(self, vec):
-
-        codes = np.empty(self.M, dtype=self.code_dtype)
-        vec = vec.reshape((self.M, self.dim))
+    def compress(self, vec):
+        vec = vec.reshape((-1, self.dim))
         norms, normalized_vecs = normalize(vec)
+        codes, _ = vq(normalized_vecs, self.codewords)
+        return [norms, codes.astype(np.uint8)]
 
-        codes[:], _ = vq(normalized_vecs, self.codewords)
-        return [norms, codes]
-
-    def decode(self, signature):
+    def decompress(self, signature):
         [norms, codes] = signature
-        vec = np.empty((self.M, self.dim), dtype=np.float32)
+        vec = np.empty((len(norms), self.dim), dtype=np.float32)
         vec[:, :] = self.codewords[codes[:], :]
         vec[:, :] = (vec.transpose() * norms).transpose()
 
-        return vec.reshape(self.shape)
-
-
-class ProductNormsReminder(object):
-    def __init__(self, size, shape):
-        self.Ks = 256
-        self.dim = 16
-        self.size = size
-        self.shape = shape
-        self.code_dtype = np.uint8 if self.Ks <= 2 ** 8 else (np.uint16 if self.Ks <= 2 ** 16 else np.uint32)
-
-        self.reminder = size % self.dim
-        self.M = size // self.dim
-
-        if self.reminder == 0:
-            self.reminder = self.dim
-        else:
-            self.M += 1
-
-        self.codewords = fvecs_read('./codebook/angular_dim_{}_Ks_{}.fvecs'.format(self.dim, self.Ks))
-        self.codewords_reminder = fvecs_read('./codebook/angular_dim_{}_Ks_{}.fvecs'.format(self.reminder, self.Ks))
-
-        self.Ds = [i * self.dim for i in range(self.M+1)]
-        self.Ds[-1] = self.size
+        return vec
 
     def encode(self, vec):
-
-        codes = np.empty(self.M, dtype=self.code_dtype)
-        norms = np.empty(self.M, dtype=np.float32)
-        vec = vec.reshape((-1))
-
-        for m in range(self.M):
-            vecs_sub = vec[self.Ds[m]: self.Ds[m + 1]]
-            norms[m] = np.linalg.norm(vecs_sub)
-            if norms[m] != 0.0:
-                vecs_sub[:] = vecs_sub[:] / norms[m]
-
-        codes[:-1], _ = vq(
-            vec[:-self.reminder].reshape((-1, self.dim)),
-            self.codewords
-        )
-        codes[-1:], _ = vq(
-            vec[-self.reminder:].reshape((1, self.reminder)),
-            self.codewords_reminder
-        )
-
-        return [norms, codes]
+        return self.compress(vec)
 
     def decode(self, signature):
-        [norms, codes] = signature
-        vec = np.empty(self.size, dtype=np.float32)
-        for m in range(0, self.M-1):
-            vec[self.Ds[m]: self.Ds[m + 1]] = norms[m] * self.codewords[codes[m]]
-        vec[-self.reminder:] = norms[-1] * self.codewords_reminder[codes[-1]]
-
-        return vec.reshape(self.shape)
-
-
-Compressor = ProductNorms
+        return self.decompress(signature).reshape(self.shape)
 
 
 class CodebookQuantizer(object):
@@ -109,7 +55,7 @@ class CodebookQuantizer(object):
         self.placeholders = placeholders
         self.layers = len(placeholders)
         self.pqs = [
-            Compressor(
+            CodebookCompressor(
                 tf.reshape(v, [-1]).shape.as_list()[0],
                 v.shape.as_list()
             )
