@@ -4,7 +4,7 @@ import numpy as np
 
 
 class Worker(object):
-    def __init__(self, batch_size=64, test_size=1000, c_dim=16):
+    def __init__(self, batch_size=64, test_size=1000, c_dim=16, lr=1e-2):
         self.comm = MPI.COMM_WORLD
         self.worker_index = self.comm.Get_rank()
         self.worker_size = self.comm.Get_size()
@@ -21,6 +21,8 @@ class Worker(object):
         self.shards = np.array([i * shard_size * c_dim for i in range(self.worker_size + 1)])
         self.shards[-1] = self.num_weights
         self.local_shard_size = self.shards[self.worker_index + 1] - self.shards[self.worker_index]
+
+        self.lr = lr * self.worker_size
 
     def syn_weights(self, weights):
         """
@@ -58,7 +60,8 @@ class Worker(object):
             self.comm.Gather(sendbuf, recvbuf, root=i)
 
         weights = self.net.variables.get_flat()
-        weights[self.shards[self.worker_index]: self.shards[self.worker_index + 1]] -= np.mean(recvbuf, axis=0) * 1e-2
+        weights[self.shards[self.worker_index]: self.shards[self.worker_index + 1]] \
+            -= np.mean(recvbuf, axis=0) * self.lr
 
         self.syn_weights(weights)
 

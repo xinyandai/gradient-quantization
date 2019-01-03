@@ -5,8 +5,8 @@ from mpi_worker import Worker
 
 
 class CodebookQuantizerWorker(Worker):
-    def __init__(self, batch_size=64, test_size=1000, c_dim=16):
-        super(CodebookQuantizerWorker, self).__init__(batch_size, test_size, c_dim)
+    def __init__(self, batch_size=64, test_size=1000, c_dim=16, lr=1e-2):
+        super(CodebookQuantizerWorker, self).__init__(batch_size, test_size, c_dim, lr)
 
         self.num_code = self.num_weights // c_dim // self.worker_size
         self.local_dim = self.num_code * c_dim
@@ -30,10 +30,14 @@ class CodebookQuantizerWorker(Worker):
 
     def shuffle_reduce(self, gradients):
         """
-        1/2. send compressed gradient shards to others
-        1/2. receive compressed gradient shard from others
-        3. decompressed and aggregate gradient shards
-        4. send compressed reduced gradient shard back
+        * send compressed gradient shards(includes norms and codes) to others
+        * receive compressed gradient shard from others
+        * decompressed received norms and codes
+        * aggregate gradient shards
+        * For the uncompressed gradient:
+        *   send uncompressed gradient to the last worker
+        *   the last worker aggregate the received uncompressed gradients
+        * send aggregated gradient shard back
         :param gradients:
         :return:
         """
@@ -57,12 +61,14 @@ class CodebookQuantizerWorker(Worker):
                 agg_grads[i, :] = flat_grad[self.dim_idx[i]: self.dim_idx[i + 1]]
 
         weights = self.net.variables.get_flat()
-        weights[self.dim_idx[self.worker_index]: self.dim_idx[self.worker_index + 1]] -= np.mean(agg_grads, axis=0) * 1e-2
+        weights[self.dim_idx[self.worker_index]: self.dim_idx[self.worker_index + 1]] \
+            -= np.mean(agg_grads, axis=0) * self.lr
 
         # all reduce the reminders
         recv_others = np.empty(shape=(self.worker_size, self.uncompress_dim), dtype=np.float32)
         sendbuf = flat_grad[-self.uncompress_dim:]
-        self.comm.Gather(sendbuf, recv_others, root=0)
-        weights[-self.uncompress_dim:] = np.mean(recv_others, axis=0) * 1e-2
+        self.comm.Gather(sendbuf, recv_others, root=self.worker_size-1)
+        if self.worker_index == self.worker_size - 1:
+            weights[-self.uncompress_dim:] = np.mean(recv_others, axis=0) * self.lr
 
         self.syn_weights(weights)

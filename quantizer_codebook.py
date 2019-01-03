@@ -14,7 +14,7 @@ def normalize(vecs):
 
 
 class CodebookCompressor(object):
-    def __init__(self, size, shape, c_dim=8):
+    def __init__(self, size, shape, c_dim=16):
         self.Ks = 256
         self.size = size
         self.shape = shape

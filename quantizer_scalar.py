@@ -4,7 +4,7 @@ import numpy as np
 class ScalarCompressor(object):
     def __init__(self):
         self.random = True
-        self.s = 4096
+        self.s = 255
 
     def compress(self, vec):
         """
