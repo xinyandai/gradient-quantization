@@ -1,39 +1,101 @@
-# Most of the tensorflow code is adapted from Tensorflow's tutorial on using
-# CNNs to train MNIST
-# https://www.tensorflow.org/get_started/mnist/pros#build-a-multilayer-convolutional-network.  # noqa: E501
-
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import tensorflow as tf
+import logging
 import tf_variables
-from tensorflow.examples.tutorials.mnist import input_data
-import time
+
+import tensorflow as tf
+import numpy as np
+
+from model_simplenn import deepnn
 
 
-def download_mnist_retry(seed=0, max_num_retries=20):
-    for _ in range(max_num_retries):
-        try:
-            return input_data.read_data_sets("MNIST_data", one_hot=True,
-                                             seed=seed)
-        except tf.errors.AlreadyExistsError:
-            time.sleep(1)
-    raise Exception("Failed to download MNIST.")
+class Datasets(object):
+    def __init__(self, train, test):
+        self.train = train
+        self.test = test
+        _, self.width, self.height, self.channels = np.shape(self.train.x)
 
 
-class SimpleCNN(object):
-    def __init__(self, learning_rate=1e-4):
+class BatchDataset(object):
+    def __init__(self, x, y, num_classes=-1, seed=0, one_hot=True):
+        assert len(x) == len(y)
+
+        self.i = 0
+        self.size = len(x)
+
+        self.x = x
+
+        if one_hot:
+            if num_classes == -1:
+                num_classes = np.max(y) + 1
+            self.y = np.eye(num_classes, dtype=np.float32)[y]
+        else:
+            self.y = y
+
+        np.random.seed(seed)
+
+        self.idx = np.arange(self.size)
+        np.random.shuffle(self.idx)
+
+        self.x[:] = self.x[self.idx]
+        self.y[:] = self.y[self.idx]
+
+    def next_batch(self, batch_size):
+        assert batch_size > 0
+        batch = (self.x[self.i:self.i + batch_size, :], self.y[self.i: self.i + batch_size, :])
+        if self.i + batch_size >= self.size:
+            self.i = 0
+        else:
+            self.i += batch_size
+        return batch
+
+
+def download_mnist_retry(seed):
+    num_classes = 10
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+    x_train, x_test = x_train / 255.0, x_test / 255.0
+    return Datasets(
+        BatchDataset(np.expand_dims(x_train, axis=3), y_train, num_classes, seed),
+        BatchDataset(np.expand_dims(x_test, axis=3), y_test, num_classes, seed)
+    )
+
+
+def download_cifar10_retry(seed):
+    num_classes = 10
+    # (50000, 32, 32, 3)  (50000, 1)
+    # (10000, 32, 32, 3)  (10000, 1)
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
+    x_train, x_test = x_train / 255.0, x_test / 255.0
+    return Datasets(
+        BatchDataset(x_train, y_train.flatten(), num_classes, seed),
+        BatchDataset(x_test, y_test.flatten(), num_classes, seed)
+    )
+
+
+class ModelCNN(object):
+    def __init__(self, dataset, net, learning_rate=1e-2, num_classes=10):
         with tf.Graph().as_default():
 
-            # Create the model
-            self.x = tf.placeholder(tf.float32, [None, 784])
-
-            # Define loss and optimizer
-            self.y_ = tf.placeholder(tf.float32, [None, 10])
-
+            # probability of drop
+            self.keep_prob = tf.placeholder(tf.float32)
+            self.x = tf.placeholder(tf.float32, [None, dataset.width, dataset.height, dataset.channels])
+            self.y_ = tf.placeholder(tf.float32, [None, num_classes])
             # Build the graph for the deep net
-            self.y_conv, self.keep_prob = deepnn(self.x)
+            if net == deepnn:
+                images = tf.image.resize_images(self.x, [28, 28])
+                if self.x.shape[-1].value > 1:
+                    images = tf.image.rgb_to_grayscale(images, name=None)
+            else:
+                images = tf.image.resize_images(self.x, [224, 224])
+                if self.x.shape[-1].value == 1:
+                    images = tf.image.grayscale_to_rgb(images, name=None)
+
+            self.y_conv, self.endpoint = net(
+                images, num_classes=num_classes, dropout_keep_prob=self.keep_prob)
+
+            logging.debug("shape of output: {}".format(self.y_conv))
 
             with tf.name_scope('loss'):
                 cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
@@ -94,88 +156,3 @@ class SimpleCNN(object):
                                         self.y_: y,
                                         self.keep_prob: 1.0})
 
-
-def deepnn(x):
-    """deepnn builds the graph for a deep net for classifying digits.
-
-    Args:
-        x: an input tensor with the dimensions (N_examples, 784), where 784 is
-            the number of pixels in a standard MNIST image.
-
-    Returns:
-        A tuple (y, keep_prob). y is a tensor of shape (N_examples, 10), with
-            values equal to the logits of classifying the digit into one of 10
-            classes (the digits 0-9). keep_prob is a scalar placeholder for the
-            probability of dropout.
-    """
-    # Reshape to use within a convolutional neural net.
-    # Last dimension is for "features" - there is only one here, since images
-    # are grayscale -- it would be 3 for an RGB image, 4 for RGBA, etc.
-    with tf.name_scope('reshape'):
-        x_image = tf.reshape(x, [-1, 28, 28, 1])
-
-    # First convolutional layer - maps one grayscale image to 32 feature maps.
-    with tf.name_scope('conv1'):
-        W_conv1 = weight_variable([5, 5, 1, 32])
-        b_conv1 = bias_variable([32])
-        h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-
-    # Pooling layer - downsamples by 2X.
-    with tf.name_scope('pool1'):
-        h_pool1 = max_pool_2x2(h_conv1)
-
-    # Second convolutional layer -- maps 32 feature maps to 64.
-    with tf.name_scope('conv2'):
-        W_conv2 = weight_variable([5, 5, 32, 64])
-        b_conv2 = bias_variable([64])
-        h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
-
-    # Second pooling layer.
-    with tf.name_scope('pool2'):
-        h_pool2 = max_pool_2x2(h_conv2)
-
-    # Fully connected layer 1 -- after 2 round of downsampling, our 28x28 image
-    # is down to 7x7x64 feature maps -- maps this to 1024 features.
-    with tf.name_scope('fc1'):
-        W_fc1 = weight_variable([7 * 7 * 64, 1024])
-        b_fc1 = bias_variable([1024])
-
-        h_pool2_flat = tf.reshape(h_pool2, [-1, 7 * 7 * 64])
-        h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
-
-    # Dropout - controls the complexity of the model, prevents co-adaptation of
-    # features.
-    with tf.name_scope('dropout'):
-        keep_prob = tf.placeholder(tf.float32)
-        h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
-
-    # Map the 1024 features to 10 classes, one for each digit
-    with tf.name_scope('fc2'):
-        W_fc2 = weight_variable([1024, 10])
-        b_fc2 = bias_variable([10])
-
-        y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
-    return y_conv, keep_prob
-
-
-def conv2d(x, W):
-    """conv2d returns a 2d convolution layer with full stride."""
-    return tf.nn.conv2d(x, W, strides=[1, 1, 1, 1], padding='SAME')
-
-
-def max_pool_2x2(x):
-    """max_pool_2x2 downsamples a feature map by 2X."""
-    return tf.nn.max_pool(x, ksize=[1, 2, 2, 1],
-                          strides=[1, 2, 2, 1], padding='SAME')
-
-
-def weight_variable(shape):
-    """weight_variable generates a weight variable of a given shape."""
-    initial = tf.truncated_normal(shape, stddev=0.1)
-    return tf.Variable(initial)
-
-
-def bias_variable(shape):
-    """bias_variable generates a bias variable of a given shape."""
-    initial = tf.constant(0.1, shape=shape)
-    return tf.Variable(initial)

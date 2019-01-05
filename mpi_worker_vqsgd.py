@@ -5,8 +5,8 @@ from mpi_worker import Worker
 
 
 class CodebookQuantizerWorker(Worker):
-    def __init__(self, batch_size=64, test_size=1000, c_dim=16, lr=1e-2):
-        super(CodebookQuantizerWorker, self).__init__(batch_size, test_size, c_dim, lr)
+    def __init__(self, net, dataset, batch_size=64, test_size=1000, c_dim=16, lr=1e-2):
+        super(CodebookQuantizerWorker, self).__init__(net, dataset, batch_size, test_size, c_dim, lr)
 
         self.num_code = self.num_weights // c_dim // self.worker_size
         self.local_dim = self.num_code * c_dim
@@ -43,7 +43,10 @@ class CodebookQuantizerWorker(Worker):
         """
         flat_grad = np.concatenate([g.flatten() for g in gradients])
 
-        agg_grads = np.empty(shape=(self.worker_size, self.local_dim), dtype=np.float32)
+        if self.worker_index == self.worker_size - 1:
+            recv_grad = np.empty(shape=(self.worker_size, self.local_dim + self.uncompress_dim), dtype=np.float32)
+        else:
+            recv_grad = np.empty(shape=(self.worker_size, self.local_dim), dtype=np.float32)
 
         recv_norm = np.empty(shape=(self.worker_size, self.num_code), dtype=np.float32)
         recv_code = np.empty(shape=(self.worker_size, self.num_code), dtype=np.uint8)
@@ -56,19 +59,20 @@ class CodebookQuantizerWorker(Worker):
 
         for i in range(self.worker_size):
             if i != self.worker_index:
-                agg_grads[i, :] = self.compressor.decompress([recv_norm[i], recv_code[i]]).flatten()
+                recv_grad[i, :self.local_dim] = self.compressor.decompress([recv_norm[i], recv_code[i]]).flatten()
             else:
-                agg_grads[i, :] = flat_grad[self.dim_idx[i]: self.dim_idx[i + 1]]
-
-        weights = self.net.variables.get_flat()
-        weights[self.dim_idx[self.worker_index]: self.dim_idx[self.worker_index + 1]] \
-            -= np.mean(agg_grads, axis=0) * self.lr
+                recv_grad[i, :self.local_dim] = flat_grad[self.dim_idx[i]: self.dim_idx[i + 1]]
 
         # all reduce the reminders
-        recv_others = np.empty(shape=(self.worker_size, self.uncompress_dim), dtype=np.float32)
+        if self.worker_index == self.worker_size - 1:
+            recv_others = np.empty(shape=(self.worker_size, self.uncompress_dim), dtype=np.float32)
+        else:
+            recv_others = None
         sendbuf = flat_grad[-self.uncompress_dim:]
         self.comm.Gather(sendbuf, recv_others, root=self.worker_size-1)
-        if self.worker_index == self.worker_size - 1:
-            weights[-self.uncompress_dim:] = np.mean(recv_others, axis=0) * self.lr
 
-        self.syn_weights(weights)
+        if self.worker_index == self.worker_size - 1:
+            assert recv_others.shape == (self.worker_size, self.uncompress_dim)
+            recv_grad[:, self.local_dim:] = recv_others[:, :]
+
+        self.apply_gradient(flat_grad, recv_grad)

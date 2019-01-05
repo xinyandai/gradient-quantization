@@ -5,8 +5,8 @@ import logging
 
 
 class ScalarQuantizerWorker(Worker):
-    def __init__(self, batch_size=64, test_size=1000, c_dim=16, lr=1e-2):
-        super(ScalarQuantizerWorker, self).__init__(batch_size, test_size, c_dim, lr)
+    def __init__(self, net, dataset, batch_size=64, test_size=1000, c_dim=16, lr=1e-2):
+        super(ScalarQuantizerWorker, self).__init__(net, dataset, batch_size, test_size, c_dim, lr)
         self.compressor = ScalarCompressor()
 
     @staticmethod
@@ -52,8 +52,4 @@ class ScalarQuantizerWorker(Worker):
             else:
                 recv_grad[i, :] = flat_grad[self.shards[i]: self.shards[i + 1]]
 
-        weights = self.net.variables.get_flat()
-        weights[self.shards[self.worker_index]: self.shards[self.worker_index + 1]] \
-            -= np.mean(recv_grad, axis=0) * self.lr
-
-        self.syn_weights(weights)
+        self.apply_gradient(flat_grad, recv_grad)
