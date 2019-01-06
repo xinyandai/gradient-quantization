@@ -58,8 +58,8 @@ if __name__ == "__main__":
     else:
         assert False
 
-    model = model.ModelCNN(dataset, net=net, learning_rate=1e-2,)
-    worker = QuantizerWorker(net=model, dataset=dataset)
+    nn = model.ModelCNN(dataset, net=net, learning_rate=1e-4,)
+    worker = QuantizerWorker(net=nn, dataset=dataset, lr=1e-4)
 
     worker.syn_weights(worker.net.variables.get_flat())
 

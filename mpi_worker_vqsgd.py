@@ -5,7 +5,7 @@ from mpi_worker import Worker
 
 
 class CodebookQuantizerWorker(Worker):
-    def __init__(self, net, dataset, batch_size=64, test_size=1000, c_dim=16, lr=1e-2):
+    def __init__(self, net, dataset, batch_size=64, test_size=1000, c_dim=32, lr=1e-2):
         super(CodebookQuantizerWorker, self).__init__(net, dataset, batch_size, test_size, c_dim, lr)
 
         self.num_code = self.num_weights // c_dim // self.worker_size
@@ -42,11 +42,7 @@ class CodebookQuantizerWorker(Worker):
         :return:
         """
         flat_grad = np.concatenate([g.flatten() for g in gradients])
-
-        if self.worker_index == self.worker_size - 1:
-            recv_grad = np.empty(shape=(self.worker_size, self.local_dim + self.uncompress_dim), dtype=np.float32)
-        else:
-            recv_grad = np.empty(shape=(self.worker_size, self.local_dim), dtype=np.float32)
+        recv_grad = np.empty(shape=(self.worker_size, self.local_shard_size), dtype=np.float32)
 
         recv_norm = np.empty(shape=(self.worker_size, self.num_code), dtype=np.float32)
         recv_code = np.empty(shape=(self.worker_size, self.num_code), dtype=np.uint8)

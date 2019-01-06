@@ -14,6 +14,7 @@ class Worker(object):
         self.net = net
         self.batch_size = batch_size
         self.test_size = test_size
+        self.c_dim = c_dim
 
         self.num_weights = self.net.variables.get_flat_size()
         self.shapes = [v.get_shape().as_list() for v in self.net.variables.variables.values()]

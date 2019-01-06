@@ -1,24 +1,19 @@
 import numpy as np
 import tensorflow as tf
+
 from vecs_io import fvecs_read
+from myutils import normalize
+
 from scipy.cluster.vq import vq
 import logging
 
 
-def normalize(vecs):
-    norms = np.linalg.norm(vecs, axis=1)
-    norms_matrix = norms[:, np.newaxis]
-    normalized_vecs = np.divide(vecs, norms_matrix, out=np.zeros_like(vecs), where=norms_matrix != 0)
-    # divide by zero problem
-    return norms, normalized_vecs
-
-
 class CodebookCompressor(object):
-    def __init__(self, size, shape, c_dim=16):
-        self.Ks = 256
+    def __init__(self, size, shape, c_dim=16, ks=256):
+        self.Ks = ks
         self.size = size
         self.shape = shape
-        self.dim = c_dim if self.size >= 16 else self.size
+        self.dim = c_dim if self.size >= c_dim else self.size
         self.code_dtype = np.uint8 if self.Ks <= 2 ** 8 else (np.uint16 if self.Ks <= 2 ** 16 else np.uint32)
 
         self.M = size // self.dim
@@ -30,7 +25,7 @@ class CodebookCompressor(object):
         vec = vec.reshape((-1, self.dim))
         norms, normalized_vecs = normalize(vec)
         codes, _ = vq(normalized_vecs, self.codewords)
-        return [norms, codes.astype(np.uint8)]
+        return [norms, codes.astype(self.code_dtype)]
 
     def decompress(self, signature):
         [norms, codes] = signature
@@ -38,13 +33,7 @@ class CodebookCompressor(object):
         vec[:, :] = self.codewords[codes[:], :]
         vec[:, :] = (vec.transpose() * norms).transpose()
 
-        return vec
-
-    def encode(self, vec):
-        return self.compress(vec)
-
-    def decode(self, signature):
-        return self.decompress(signature).reshape(self.shape)
+        return vec.reshape(self.shape)
 
 
 class CodebookQuantizer(object):
@@ -68,7 +57,7 @@ class CodebookQuantizer(object):
         :return: python list of python list
         """
         assert self.layers == len(gradient)
-        return [pq.encode(g) for pq, g in zip(self.pqs, gradient)]
+        return [pq.compress(g) for pq, g in zip(self.pqs, gradient)]
 
     def decode(self, gradients):
         """
@@ -83,9 +72,9 @@ class CodebookQuantizer(object):
         for gradient in gradients:
             for i, (pq, code) in enumerate(zip(self.pqs, gradient)):
                 if aggregator[i] is None:
-                    aggregator[i] = pq.decode(code)
+                    aggregator[i] = pq.decompress(code)
                 else:
-                    aggregator[i][:] += pq.decode(code)
+                    aggregator[i][:] += pq.decompress(code)
         for agg in aggregator:
             agg[:] = agg[:] / len(gradients)
         return aggregator

@@ -5,17 +5,22 @@ import logging
 
 
 class ScalarQuantizerWorker(Worker):
-    def __init__(self, net, dataset, batch_size=64, test_size=1000, c_dim=16, lr=1e-2):
+    def __init__(self, net, dataset, batch_size=64, test_size=1000, c_dim=1024, lr=1e-2):
         super(ScalarQuantizerWorker, self).__init__(net, dataset, batch_size, test_size, c_dim, lr)
-        self.compressor = ScalarCompressor()
 
-    @staticmethod
-    def compressed_size(float_size):
-        """
-        :param float_size: number of float integers before compressing
-        :return: number of uint8 afters compressing
-        """
-        return float_size + float_size // 8 + 1 + 4
+        self.num_code = self.num_weights // c_dim // self.worker_size
+        self.local_dim = self.num_code * c_dim
+        self.compressed_dim = self.num_code * c_dim * self.worker_size
+        self.uncompress_dim = self.num_weights - self.compressed_dim
+        self.code_idx = np.array([i * self.num_code for i in range(self.worker_size + 1)])
+        self.dim_idx = np.array([i * self.num_code * c_dim for i in range(self.worker_size + 1)])
+
+        self.compressor = ScalarCompressor(
+            size=self.compressed_dim,
+            shape=(-1),
+            c_dim=c_dim,
+            s=256
+        )
 
     def shuffle_reduce(self, gradients):
         """
@@ -28,28 +33,39 @@ class ScalarQuantizerWorker(Worker):
         """
         flat_grad = np.concatenate([g.flatten() for g in gradients])
         recv_grad = np.empty(shape=(self.worker_size, self.local_shard_size), dtype=np.float32)
-        recv_buff = np.empty(shape=(self.worker_size, self.compressed_size(self.local_shard_size)), dtype=np.uint8)
+
+        recv_norm = np.empty(shape=(self.worker_size, self.num_code), dtype=np.float32)
+        recv_code = np.empty(shape=(self.worker_size, self.local_dim), dtype=np.uint8)
+        recv_sign = np.empty(shape=(self.worker_size, self.local_dim // 8 + 1), dtype=np.uint8)
+
+        [norms, signs, codes] = self.compressor.compress(flat_grad[:self.compressed_dim])
+        [norms, signs, codes] = [norms, signs.reshape((-1, self.c_dim)), codes.reshape((-1, self.c_dim))]
 
         for i in range(self.worker_size):
-            shard_i = flat_grad[self.shards[i]: self.shards[i + 1]]
-            [norm, signs, l] = self.compressor.compress(vec=shard_i)
+            self.comm.Gather(norms[self.code_idx[i]:self.code_idx[i+1]], recv_norm, root=i)
+            self.comm.Gather(codes[self.code_idx[i]:self.code_idx[i+1]], recv_code, root=i)
 
-            sendbuf = np.empty(shape=self.compressed_size(len(shard_i)), dtype=np.uint8)
-            sendbuf[0:4].view(np.float32)[0] = norm
-            sendbuf[4:4+len(shard_i)] = l[:]
-            pack_signs = np.packbits(signs)
-            sendbuf[4+len(shard_i):4+len(shard_i) + len(pack_signs)] = pack_signs[:]
-
-            self.comm.Gather(sendbuf, recv_buff, root=i)
+            pack_signs = np.packbits(signs[self.code_idx[i]:self.code_idx[i+1]])
+            self.comm.Gather(pack_signs, recv_sign, root=i)
 
         for i in range(self.worker_size):
             if i != self.worker_index:
-                norm = recv_buff[i, 0:4].view(np.float32)[0]
-                signs = np.unpackbits(recv_buff[i, 4 + self.local_shard_size:])[:self.local_shard_size]
-                l = recv_buff[i, 4:4 + self.local_shard_size]
-
-                recv_grad[i, :] = self.compressor.decompress(norm=norm, signs=signs, l=l)
+                norm = recv_norm[i, :]
+                sign = np.unpackbits(recv_sign[i, :])[:self.local_dim]
+                l = recv_code[i, :]
+                recv_grad[i, :self.local_dim] = self.compressor.decompress([norm, sign, l]).flatten()
             else:
-                recv_grad[i, :] = flat_grad[self.shards[i]: self.shards[i + 1]]
+                recv_grad[i, :self.local_dim] = flat_grad[self.dim_idx[i]: self.dim_idx[i + 1]]
+
+        # all reduce the reminders
+        if self.worker_index == self.worker_size - 1:
+            recv_others = np.empty(shape=(self.worker_size, self.uncompress_dim), dtype=np.float32)
+        else:
+            recv_others = None
+        sendbuf = flat_grad[-self.uncompress_dim:]
+        self.comm.Gather(sendbuf, recv_others, root=self.worker_size-1)
+
+        if self.worker_index == self.worker_size - 1:
+            recv_grad[:, self.local_dim:] = recv_others[:, :]
 
         self.apply_gradient(flat_grad, recv_grad)

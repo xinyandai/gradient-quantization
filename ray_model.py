@@ -41,7 +41,7 @@ class SimpleCNN(object):
             self.cross_entropy = tf.reduce_mean(cross_entropy)
 
             with tf.name_scope('adam_optimizer'):
-                self.optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+                self.optimizer = tf.train.AdamOptimizer(learning_rate)
                 self.train_step = self.optimizer.minimize(
                     self.cross_entropy)
 
