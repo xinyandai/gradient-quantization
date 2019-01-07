@@ -73,6 +73,6 @@ if __name__ == "__main__":
             # Evaluate the current model.
             loss, accuracy = worker.compute_loss_accuracy()
             if worker_index == 0:
-                logging.info("{}, {}, {}, {}".format(i, timer.toc(), loss, accuracy))
+                logging.info("%d, %.3f, %.3f, %.3f" % (i, timer.toc(), loss, accuracy))
         i += 1
         worker.shuffle_reduce(worker.compute_gradients())
