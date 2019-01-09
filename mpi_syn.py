@@ -1,4 +1,5 @@
 from mpi_worker_vqsgd import CodebookQuantizerWorker
+from mpi_worker_polytope import PolytopeQuantizerWorker
 from mpi_worker_qsgd import ScalarQuantizerWorker
 from mpi_worker import Worker
 from myutils import Timer
@@ -34,6 +35,8 @@ if __name__ == "__main__":
         QuantizerWorker = ScalarQuantizerWorker
     elif args.quantizer.lower() == 'codebook':
         QuantizerWorker = CodebookQuantizerWorker
+    elif args.quantizer.lower() == 'polytope':
+        QuantizerWorker = PolytopeQuantizerWorker
     else:
         assert False
 
