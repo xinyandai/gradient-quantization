@@ -17,6 +17,4 @@ Run MPI
     mpirun -np 4 python mpi_syn.py --quantizer codebook --dataset mnist --network simple
 Run cuda-aware MPI(developing)
 
-    git clone https://github.com/xinyandai/similarity-search.git
-    cd similarity-search
-    sh srp.sh
+    cd ..
