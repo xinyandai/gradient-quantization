@@ -53,7 +53,9 @@ class SimpleCNN(object):
 
             self.sess = tf.Session(config=tf.ConfigProto(
                 intra_op_parallelism_threads=1,
-                inter_op_parallelism_threads=1))
+                inter_op_parallelism_threads=1,
+                device_count={'GPU': 0})
+            )
             self.sess.run(tf.global_variables_initializer())
 
             # Helper values.
