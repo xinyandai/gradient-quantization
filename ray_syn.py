@@ -19,16 +19,22 @@ parser.add_argument("--redis-address", default=None, type=str,
                     help="The Redis address of the cluster.")
 parser.add_argument("--quantizer", default='codebook', type=str,
                     help="Compressor for gradient.")
-
+parser.add_argument("--two-phases", default=False, type=bool,
+                    help="Using 2-phases quantization.")
 
 @ray.remote
 class ParameterServer(object):
-    def __init__(self, learning_rate):
+    def __init__(self, learning_rate, two_phases=False):
+        self.two_phases = two_phases
         self.net = model.SimpleCNN(learning_rate=learning_rate)
         self.quantizer = Quantizer(self.net.variables.placeholders)
 
     def apply_gradients(self, *gradients):
-        self.net.apply_gradients(self.quantizer.decode(gradients))
+        decompressed = self.quantizer.decode(gradients)
+        if self.two_phases:
+            compressed = self.quantizer.encode(decompressed)
+            decompressed = self.quantizer.decode([compressed])
+        self.net.apply_gradients(decompressed)
         return self.net.variables.get_flat()
 
     def get_weights(self):
@@ -67,7 +73,7 @@ if __name__ == "__main__":
     # Create a parameter server.
     net = model.SimpleCNN()
 
-    ps = ParameterServer.remote(1e-4 * args.num_workers)
+    ps = ParameterServer.remote(1e-2 * args.num_workers, two_phases=args.two_phases)
 
     # Create workers.
     workers = [Worker.remote(worker_index)
