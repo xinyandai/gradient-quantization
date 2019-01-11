@@ -22,6 +22,7 @@ parser.add_argument("--quantizer", default='codebook', type=str,
 parser.add_argument("--two-phases", default=False, type=bool,
                     help="Using 2-phases quantization.")
 
+
 @ray.remote
 class ParameterServer(object):
     def __init__(self, learning_rate, two_phases=False):
@@ -86,17 +87,18 @@ if __name__ == "__main__":
     current_weights = ps.get_weights.remote()
 
     from myutils import Timer
+    timer = Timer()
+    print("Iteration, time, loss, accuracy")
     while True:
         # Compute and apply gradients.
-        with Timer("Iteration {}".format(i)):
-            for _ in range(10):
-                gradients = [worker.compute_gradients.remote(current_weights) for worker in workers]
-                current_weights = ps.apply_gradients.remote(*gradients)
+        for _ in range(10):
+            gradients = [worker.compute_gradients.remote(current_weights) for worker in workers]
+            current_weights = ps.apply_gradients.remote(*gradients)
 
-                if i % 10 == 0:
-                    # Evaluate the current model.
-                    net.variables.set_flat(ray.get(current_weights))
-                    test_xs, test_ys = mnist.test.next_batch(1000)
-                    loss, accuracy = net.compute_loss_accuracy(test_xs, test_ys)
-                    print("Iteration {}: loss is {}, accuracy is {}".format(i, loss, accuracy))
-                i += 1
+            if i % 10 == 0:
+                # Evaluate the current model.
+                net.variables.set_flat(ray.get(current_weights))
+                test_xs, test_ys = mnist.test.next_batch(1000)
+                loss, accuracy = net.compute_loss_accuracy(test_xs, test_ys)
+                print("%d, %.3f, %.3f, %.3f" % (i, timer.toc(), loss, accuracy))
+            i += 1
