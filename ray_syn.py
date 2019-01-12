@@ -4,7 +4,11 @@ from __future__ import print_function
 
 import argparse
 import ray
-import ray_model as model
+
+from model_resnet import ResNet
+from model_simple import SimpleCNN
+import mpi_dataset
+
 from quantizer_identical import IdenticalQuantizer
 from quantizer_scalar import ScalarQuantizer
 from quantizer_codebook import CodebookQuantizer
@@ -21,13 +25,29 @@ parser.add_argument("--quantizer", default='codebook', type=str,
                     help="Compressor for gradient.")
 parser.add_argument("--two-phases", default=False, type=bool,
                     help="Using 2-phases quantization.")
+parser.add_argument("--dataset", default="cifar", type=str,
+                    help="Using 2-phases quantization.")
+parser.add_argument("--batch-size", default=128, type=int,
+                    help="Using 2-phases quantization.")
+
+
+def load_network(args):
+    if args.dataset == 'mnist':
+        dataset = mpi_dataset.download_mnist_retry(0)
+        network = SimpleCNN
+    elif args.dataset == 'cifar':
+        dataset = mpi_dataset.download_cifar10_retry(0)
+        network = ResNet
+    else:
+        assert False
+    return network(dataset=dataset, batch_size=args.batch_size)
 
 
 @ray.remote
 class ParameterServer(object):
-    def __init__(self, learning_rate, two_phases=False):
+    def __init__(self, args, two_phases=False):
         self.two_phases = two_phases
-        self.net = model.SimpleCNN(learning_rate=learning_rate)
+        self.net = load_network(args)
         self.quantizer = Quantizer(self.net.variables.placeholders)
 
     def apply_gradients(self, *gradients):
@@ -44,16 +64,16 @@ class ParameterServer(object):
 
 @ray.remote
 class Worker(object):
-    def __init__(self, worker_index, batch_size=50):
+    def __init__(self, args, worker_index):
         self.worker_index = worker_index
-        self.batch_size = batch_size
-        self.mnist = model.download_mnist_retry(seed=worker_index)
-        self.net = model.SimpleCNN()
+        self.net = load_network(args)
+        self.batch_size = args.batch_size
+        self.dataset = self.net.dataset
         self.quantizer = Quantizer(self.net.variables.placeholders)
 
     def compute_gradients(self, weights):
         self.net.variables.set_flat(weights)
-        xs, ys = self.mnist.train.next_batch(self.batch_size)
+        xs, ys = self.dataset.train.next_batch(self.batch_size)
         return self.quantizer.encode(self.net.compute_gradients(xs, ys))
 
 
@@ -71,17 +91,23 @@ if __name__ == "__main__":
 
     ray.init(redis_address=args.redis_address)
 
-    # Create a parameter server.
-    net = model.SimpleCNN()
+    test_batch_size = 1000
 
-    ps = ParameterServer.remote(1e-2 * args.num_workers, two_phases=args.two_phases)
+    if args.dataset == 'mnist':
+        dataset = mpi_dataset.download_mnist_retry(0)
+        network = SimpleCNN
+    elif args.dataset == 'cifar':
+        dataset = mpi_dataset.download_cifar10_retry(0)
+        network = ResNet
+    else:
+        assert False
+    net = network(dataset=dataset, batch_size=test_batch_size)
 
+    # dataset, network, batch_size, two_phases=False
+    ps = ParameterServer.remote(args, two_phases=args.two_phases)
     # Create workers.
-    workers = [Worker.remote(worker_index)
+    workers = [Worker.remote(args, worker_index)
                for worker_index in range(args.num_workers)]
-
-    # Download MNIST.
-    mnist = model.download_mnist_retry()
 
     i = 0
     current_weights = ps.get_weights.remote()
@@ -98,7 +124,7 @@ if __name__ == "__main__":
             if i % 10 == 0:
                 # Evaluate the current model.
                 net.variables.set_flat(ray.get(current_weights))
-                test_xs, test_ys = mnist.test.next_batch(1000)
+                test_xs, test_ys = dataset.test.next_batch(test_batch_size)
                 loss, accuracy = net.compute_loss_accuracy(test_xs, test_ys)
                 print("%d, %.3f, %.3f, %.3f" % (i, timer.toc(), loss, accuracy))
             i += 1

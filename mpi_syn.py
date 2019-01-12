@@ -4,11 +4,10 @@ from mpi_worker_qsgd import ScalarQuantizerWorker
 from mpi_worker import Worker
 from myutils import Timer
 from mpi4py import MPI
-from model_simplenn import deepnn
-from model_vgg import vgg_16
-from model_alexnet import alexnet_v2
+from model_simple import SimpleCNN
+from model_resnet import ResNet
 
-import mpi_model as model
+import mpi_dataset
 
 import logging
 import argparse
@@ -44,24 +43,19 @@ if __name__ == "__main__":
         logging.info('initialize quantization worker as {}'.format(QuantizerWorker))
 
     if args.dataset == "mnist":
-        dataset = model.download_mnist_retry(seed=worker_index)
+        dataset = mpi_dataset.download_mnist_retry(seed=worker_index)
     elif args.dataset == "cifar":
-        dataset = model.download_cifar10_retry(seed=worker_index)
+        dataset = mpi_dataset.download_cifar10_retry(seed=worker_index)
     else:
         assert False
 
     if args.network == "simple":
-        net = deepnn
-    elif args.network == "alexnet":
-        net = alexnet_v2
-    elif args.network == "vgg":
-        net = vgg_16
+        nn = SimpleCNN(dataset)
     elif args.network == "resnet":
-        assert False, "Not implemented yet"
+        nn = ResNet(dataset)
     else:
         assert False
 
-    nn = model.ModelCNN(dataset, net=net, learning_rate=1e-4,)
     worker = QuantizerWorker(net=nn, dataset=dataset, lr=1e-4)
 
     worker.syn_weights(worker.net.variables.get_flat())
