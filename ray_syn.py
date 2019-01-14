@@ -5,6 +5,8 @@ from __future__ import print_function
 import argparse
 import ray
 
+import numpy as np
+
 from model_resnet import ResNet
 from model_simple import SimpleCNN
 from model_lr import LinearRegression
@@ -72,6 +74,7 @@ class ParameterServer(object):
 @ray.remote
 class Worker(object):
     def __init__(self, args, worker_index):
+        self.args = args
         self.worker_index = worker_index
         self.net = load_network(args, seed=worker_index)
         self.batch_size = args.batch_size
@@ -82,6 +85,11 @@ class Worker(object):
         self.net.variables.set_flat(weights)
         xs, ys = self.dataset.train.next_batch(self.batch_size)
         return self.quantizer.encode(self.net.compute_gradients(xs, ys))
+
+    def loss_accuracy(self):
+        test_xs_, test_ys_ = self.dataset.test.next_batch(self.args.batch_size)
+        loss_, accuracy_ = self.net.compute_loss_accuracy(test_xs_, test_ys_)
+        return loss_, accuracy_
 
 
 if __name__ == "__main__":
@@ -97,8 +105,6 @@ if __name__ == "__main__":
         assert False
 
     ray.init(redis_address=args.redis_address)
-
-    valid_net = load_network(args, seed=0, validation=True)
 
     # dataset, network, batch_size, two_phases=False
     ps = ParameterServer.remote(args, two_phases=args.two_phases)
@@ -120,8 +126,7 @@ if __name__ == "__main__":
 
             if i % 10 == 0:
                 # Evaluate the current model.
-                valid_net.variables.set_flat(ray.get(current_weights))
-                test_xs, test_ys = valid_net.dataset.test.next_batch(args.test_batch_size)
-                loss, accuracy = valid_net.compute_loss_accuracy(test_xs, test_ys)
+                loss_accuracy = ray.get([worker.loss_accuracy.remote() for worker in workers])
+                loss, accuracy = np.mean(loss_accuracy, axis=0)
                 print("%d, %.3f, %.3f, %.3f" % (i, timer.toc(), loss, accuracy))
             i += 1
