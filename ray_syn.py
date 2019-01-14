@@ -7,6 +7,7 @@ import ray
 
 from model_resnet import ResNet
 from model_simple import SimpleCNN
+from model_lr import LinearRegression
 import mpi_dataset
 
 from quantizer_identical import IdenticalQuantizer
@@ -25,21 +26,24 @@ parser.add_argument("--quantizer", default='codebook', type=str,
                     help="Compressor for gradient.")
 parser.add_argument("--two-phases", default=False, type=bool,
                     help="Using 2-phases quantization.")
-parser.add_argument("--dataset", default="cifar", type=str,
-                    help="Using 2-phases quantization.")
+parser.add_argument("--network", default="resnet", type=str,
+                    help="Network architectures")
 parser.add_argument("--batch-size", default=128, type=int,
-                    help="Using 2-phases quantization.")
+                    help="batch size.")
 parser.add_argument("--test-batch-size", default=1000, type=int,
-                    help="Using 2-phases quantization.")
+                    help="test batch size.")
 
 
 def load_network(args, seed=0, validation=False):
-    if args.dataset == 'mnist':
+    if args.network == 'simple':
         dataset = mpi_dataset.download_mnist_retry(seed)
         network = SimpleCNN
-    elif args.dataset == 'cifar':
+    elif args.network == 'resnet':
         dataset = mpi_dataset.download_cifar10_retry(seed)
         network = ResNet
+    elif args.network == 'lr':
+        dataset = mpi_dataset.download_mnist_retry(seed)
+        network = LinearRegression
     else:
         assert False
     return network(dataset=dataset,
