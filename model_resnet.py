@@ -363,7 +363,7 @@ if __name__ == '__main__':
         # Compute and apply gradients.
         for _ in range(10):
 
-            xs, ys = dataset.test.next_batch(batch_size)
+            xs, ys = dataset.train.next_batch(batch_size)
             gradients = net.compute_gradients(xs, ys)
             net.apply_gradients(gradients)
 

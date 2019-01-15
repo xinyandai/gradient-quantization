@@ -2,15 +2,17 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import argparse
 import ray
+import argparse
+import mpi_dataset
 
 import numpy as np
+
+from myutils import Timer
 
 from model_resnet import ResNet
 from model_simple import SimpleCNN
 from model_lr import LinearRegression
-import mpi_dataset
 
 from quantizer_identical import IdenticalQuantizer
 from quantizer_scalar import ScalarQuantizer
@@ -49,7 +51,7 @@ def load_network(args, seed=0, validation=False):
     else:
         assert False
     return network(dataset=dataset,
-                   batch_size=args.test_batch_size if validation else args.batch_size)
+                   batch_size=args.test_batch_size if validation else args.batch_size,)
 
 
 @ray.remote
@@ -106,27 +108,24 @@ if __name__ == "__main__":
 
     ray.init(redis_address=args.redis_address)
 
-    # dataset, network, batch_size, two_phases=False
     ps = ParameterServer.remote(args, two_phases=args.two_phases)
-    # Create workers.
     workers = [Worker.remote(args, worker_index)
                for worker_index in range(args.num_workers)]
 
-    i = 0
-    current_weights = ps.get_weights.remote()
-
-    from myutils import Timer
-    timer = Timer()
     print("Iteration, time, loss, accuracy")
+    i = 0
+    timer = Timer()
+    current_weights = ps.get_weights.remote()
     while True:
-        # Compute and apply gradients.
         for _ in range(10):
             gradients = [worker.compute_gradients.remote(current_weights) for worker in workers]
             current_weights = ps.apply_gradients.remote(*gradients)
 
             if i % 10 == 0:
-                # Evaluate the current model.
-                loss_accuracy = ray.get([worker.loss_accuracy.remote() for worker in workers])
-                loss, accuracy = np.mean(loss_accuracy, axis=0)
+                loss_accuracy = [
+                    ray.get([worker.loss_accuracy.remote() for worker in workers])
+                    for _ in range(args.test_batch_size//args.batch_size + 1)
+                ]
+                loss, accuracy = np.mean(np.array(loss_accuracy).reshape((-1, 2)), axis=0)
                 print("%d, %.3f, %.3f, %.3f" % (i, timer.toc(), loss, accuracy))
             i += 1
