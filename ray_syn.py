@@ -13,6 +13,7 @@ from myutils import Timer
 from model_resnet import ResNet
 from model_simple import SimpleCNN
 from model_lr import LinearRegression
+from model_two_layer import TwoLayerNetwork
 
 from quantizer_identical import IdenticalQuantizer
 from quantizer_scalar import ScalarQuantizer
@@ -31,7 +32,7 @@ parser.add_argument("--quantizer", default='random_codebook', type=str,
                     help="Compressor for gradient.")
 parser.add_argument("--two-phases", default=True, type=bool,
                     help="Using 2-phases quantization.")
-parser.add_argument("--network", default="simple", type=str,
+parser.add_argument("--network", default="two_layer", type=str,
                     help="Network architectures")
 parser.add_argument("--batch-size", default=128, type=int,
                     help="batch size.")
@@ -43,12 +44,15 @@ def load_network(args, seed=0, validation=False):
     if args.network == 'simple':
         dataset = mpi_dataset.download_mnist_retry(seed)
         network = SimpleCNN
-    elif args.network == 'resnet':
-        dataset = mpi_dataset.download_cifar10_retry(seed)
-        network = ResNet
     elif args.network == 'lr':
         dataset = mpi_dataset.download_mnist_retry(seed)
         network = LinearRegression
+    elif args.network == 'two_layer':
+        dataset = mpi_dataset.download_mnist_retry(seed)
+        network = TwoLayerNetwork
+    elif args.network == 'resnet':
+        dataset = mpi_dataset.download_cifar10_retry(seed)
+        network = ResNet
     else:
         assert False
     return network(dataset=dataset,
