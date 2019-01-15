@@ -12,7 +12,7 @@ import logging
 import tf_variables
 
 
-def two_layer(x, num_classes=10, dropout_keep_prob=0.5, hidden_layer=1024):
+def two_layer(x, num_classes=10, dropout_keep_prob=0.5, hidden_layer=256):
     # Reshape to use within a convolutional neural net.
     # Last dimension is for "features" - there is only one here, since images
     # are grayscale -- it would be 3 for an RGB image, 4 for RGBA, etc.

@@ -28,15 +28,15 @@ parser.add_argument("--num-workers", default=1, type=int,
                     help="The number of workers to use.")
 parser.add_argument("--redis-address", default=None, type=str,
                     help="The Redis address of the cluster.")
-parser.add_argument("--quantizer", default='random_codebook', type=str,
+parser.add_argument("--quantizer", default='identical', type=str,
                     help="Compressor for gradient.")
 parser.add_argument("--two-phases", default=True, type=bool,
                     help="Using 2-phases quantization.")
 parser.add_argument("--network", default="two_layer", type=str,
                     help="Network architectures")
-parser.add_argument("--batch-size", default=128, type=int,
+parser.add_argument("--batch-size", default=32, type=int,
                     help="batch size.")
-parser.add_argument("--test-batch-size", default=1000, type=int,
+parser.add_argument("--test-batch-size", default=4096, type=int,
                     help="test batch size.")
 
 
@@ -93,8 +93,13 @@ class Worker(object):
         xs, ys = self.dataset.train.next_batch(self.batch_size)
         return self.quantizer.encode(self.net.compute_gradients(xs, ys))
 
-    def loss_accuracy(self):
+    def test_loss_accuracy(self):
         test_xs_, test_ys_ = self.dataset.test.next_batch(self.args.batch_size)
+        loss_, accuracy_ = self.net.compute_loss_accuracy(test_xs_, test_ys_)
+        return loss_, accuracy_
+
+    def train_loss_accuracy(self):
+        test_xs_, test_ys_ = self.dataset.valid.next_batch(self.args.batch_size)
         loss_, accuracy_ = self.net.compute_loss_accuracy(test_xs_, test_ys_)
         return loss_, accuracy_
 
@@ -128,11 +133,16 @@ if __name__ == "__main__":
             gradients = [worker.compute_gradients.remote(current_weights) for worker in workers]
             current_weights = ps.apply_gradients.remote(*gradients)
 
-            if i % 10 == 0:
-                loss_accuracy = [
-                    ray.get([worker.loss_accuracy.remote() for worker in workers])
+            if i % 100 == 0:
+                test_accuracy = [
+                    ray.get([worker.test_loss_accuracy.remote() for worker in workers])
                     for _ in range(args.test_batch_size//args.batch_size + 1)
                 ]
-                loss, accuracy = np.mean(np.array(loss_accuracy).reshape((-1, 2)), axis=0)
-                print("%d, %.3f, %.3f, %.3f" % (i, timer.toc(), loss, accuracy))
+                train_accuracy = [
+                    ray.get([worker.train_loss_accuracy.remote() for worker in workers])
+                    for _ in range(args.test_batch_size // args.batch_size + 1)
+                ]
+                ts_loss, ts_accuracy = np.mean(np.array(test_accuracy).reshape((-1, 2)), axis=0)
+                tr_loss, tr_accuracy = np.mean(np.array(train_accuracy).reshape((-1, 2)), axis=0)
+                print("%d, %.3f, %.3f, %.3f, %.3f, %.3f" % (i, timer.toc(), ts_loss, ts_accuracy, tr_loss, tr_accuracy))
             i += 1

@@ -7,9 +7,10 @@ import numpy as np
 
 
 class Datasets(object):
-    def __init__(self, train, test):
+    def __init__(self, train, valid, test):
         self.train = train
         self.test = test
+        self.valid = valid
         _, self.width, self.height, self.channels = np.shape(self.train.x)
 
 
@@ -20,14 +21,14 @@ class BatchDataset(object):
         self.i = 0
         self.size = len(x)
 
-        self.x = x
+        self.x = x.copy()
 
         if one_hot:
             if num_classes == -1:
                 num_classes = np.max(y) + 1
             self.y = np.eye(num_classes, dtype=np.float32)[y]
         else:
-            self.y = y
+            self.y = y.copy()
 
         np.random.seed(seed)
 
@@ -58,6 +59,7 @@ def download_mnist_retry(seed):
     x_train, x_test = x_train / 255.0, x_test / 255.0
     return Datasets(
         BatchDataset(np.expand_dims(x_train, axis=3), y_train, num_classes, seed),
+        BatchDataset(np.expand_dims(x_train, axis=3), y_train, num_classes, seed),
         BatchDataset(np.expand_dims(x_test, axis=3), y_test, num_classes, seed)
     )
 
@@ -69,6 +71,7 @@ def download_cifar10_retry(seed):
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
     return Datasets(
+        BatchDataset(x_train, y_train.flatten(), num_classes, seed),
         BatchDataset(x_train, y_train.flatten(), num_classes, seed),
         BatchDataset(x_test, y_test.flatten(), num_classes, seed)
     )
