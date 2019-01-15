@@ -17,6 +17,7 @@ from model_lr import LinearRegression
 from quantizer_identical import IdenticalQuantizer
 from quantizer_scalar import ScalarQuantizer
 from quantizer_codebook import CodebookQuantizer
+from quantizer_random_codebook import RandomCodebookQuantizer
 
 
 Quantizer = None
@@ -26,11 +27,11 @@ parser.add_argument("--num-workers", default=1, type=int,
                     help="The number of workers to use.")
 parser.add_argument("--redis-address", default=None, type=str,
                     help="The Redis address of the cluster.")
-parser.add_argument("--quantizer", default='codebook', type=str,
+parser.add_argument("--quantizer", default='random_codebook', type=str,
                     help="Compressor for gradient.")
-parser.add_argument("--two-phases", default=False, type=bool,
+parser.add_argument("--two-phases", default=True, type=bool,
                     help="Using 2-phases quantization.")
-parser.add_argument("--network", default="resnet", type=str,
+parser.add_argument("--network", default="simple", type=str,
                     help="Network architectures")
 parser.add_argument("--batch-size", default=128, type=int,
                     help="batch size.")
@@ -103,6 +104,8 @@ if __name__ == "__main__":
         Quantizer = ScalarQuantizer
     elif args.quantizer.lower() == 'codebook':
         Quantizer = CodebookQuantizer
+    elif args.quantizer.lower() == 'random_codebook':
+        Quantizer = RandomCodebookQuantizer
     else:
         assert False
 
