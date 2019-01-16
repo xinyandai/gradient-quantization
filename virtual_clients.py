@@ -11,6 +11,7 @@ import numpy as np
 from myutils import Timer
 
 from model_resnet import ResNet
+from model_modelc import ModelC
 from model_simple import SimpleCNN
 from model_lr import LinearRegression
 from model_two_layer import TwoLayerNetwork
@@ -30,7 +31,7 @@ parser.add_argument("--quantizer", default='random_codebook', type=str,
                     help="Compressor for gradient.")
 parser.add_argument("--two-phases", default=True, type=bool,
                     help="Using 2-phases quantization.")
-parser.add_argument("--network", default="two_layer", type=str,
+parser.add_argument("--network", default="modelC", type=str,
                     help="Network architectures")
 parser.add_argument("--batch-size", default=1, type=int,
                     help="batch size.")
@@ -51,6 +52,9 @@ def load_network(args, seed=0, validation=False):
     elif args.network == 'resnet':
         dataset = mpi_dataset.download_cifar10_retry(seed)
         network = ResNet
+    elif args.network == 'modelC':
+        dataset = mpi_dataset.download_cifar10_retry(seed)
+        network = ModelC
     else:
         assert False
     return network(dataset=dataset,
@@ -69,7 +73,8 @@ class Worker(object):
 
     def compute_gradients(self):
         xs, ys = self.dataset.train.next_batch(self.batch_size)
-        return self.quantizer.encode(self.net.compute_gradients(xs, ys))
+        g = self.net.compute_gradients(xs, ys)
+        return self.quantizer.encode(g)
 
     def apply_gradients(self, gradients_):
         decompressed = self.quantizer.decode(gradients_)
