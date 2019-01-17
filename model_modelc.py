@@ -22,22 +22,68 @@ MODELC_VARIABLES = 'modelc_variables'
 UPDATE_OPS_COLLECTION = 'modelc_update_ops'  # must be grouped with training op
 IMAGENET_MEAN_BGR = [103.062623801, 115.902882574, 123.151630838, ]
 
+activation = tf.nn.relu
 
-def fc(x, c):
-    num_units_in = x.get_shape()[1]
-    num_units_out = c['fc_units_out']
-    weights_initializer = tf.truncated_normal_initializer(
-        stddev=FC_WEIGHT_STDDEV)
 
-    weights = _get_variable('weights',
-                            shape=[num_units_in, num_units_out],
-                            initializer=weights_initializer,
-                            weight_decay=FC_WEIGHT_STDDEV)
-    biases = _get_variable('biases',
-                           shape=[num_units_out],
-                           initializer=tf.zeros_initializer)
-    x = tf.nn.xw_plus_b(x, weights, biases)
+def inference(x, is_training, use_bias=True, num_classes=10):
+    c = dict()
+    c['is_training'] = tf.convert_to_tensor(is_training, dtype='bool', name='is_training')
+    c['use_bias'] = use_bias
+    c['fc_units_out'] = num_classes
+    c['num_classes'] = num_classes
+    c['ksize'] = 3
+    c['stride'] = 1
+    c['conv_filters_out'] = 96
+    with tf.variable_scope('layer1'):
+        x = conv(x, c)
+        x = activation(x)
+    with tf.variable_scope('layer2'):
+        x = conv(x,c)
+        x = activation(x)
+    with tf.variable_scope('layer3'):
+        c['stride'] = 2
+        x = conv(x,c)
+        x = activation(x)
+    with tf.variable_scope('layer4'):
+        c['conv_filters_out'] = 192
+        x = conv(x,c)
+        x = activation(x)
+    with tf.variable_scope('layer5'):
+        c['conv_filters_out'] = 192
+        # layer 5
+        x = conv(x, c)
+        x = activation(x)
+    with tf.variable_scope('layer6'):
+        c['conv_filters_out'] = 192
+        c['stride'] = 2
+        x = conv(x, c)
+        x = activation(x)
+    with tf.variable_scope('layer7'):
+        c['conv_filters_out'] = 192
+        x = conv(x, c)
+        x = activation(x)
+    with tf.variable_scope('layer8'):
+        c['ksize'] = 1
+        c['conv_filters_out'] = 192
+        x = conv(x, c)
+        x = activation(x)
+    with tf.variable_scope('layer9'):
+        c['ksize'] = 1
+        c['conv_filters_out'] = 10
+        x = conv(x, c)
+        x = activation(x)
+    x = tf.reduce_mean(x, reduction_indices=[1, 2], name="avg_pool")
     return x
+
+
+def loss(logits, labels):
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels)
+    cross_entropy_mean = tf.reduce_mean(cross_entropy)
+    regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+
+    loss_ = tf.add_n([cross_entropy_mean] + regularization_losses)
+    tf.summary.scalar('loss', loss_)
+    return loss_
 
 
 def _get_variable(name,
@@ -62,7 +108,11 @@ def _get_variable(name,
                            trainable=trainable)
 
 
-def conv(x, ksize, stride, filters_out):
+def conv(x, c):
+    ksize = c['ksize']
+    stride = c['stride']
+    filters_out = c['conv_filters_out']
+
     filters_in = x.get_shape()[-1]
     shape = [ksize, ksize, filters_in, filters_out]
     initializer = tf.truncated_normal_initializer(stddev=CONV_WEIGHT_STDDEV)
@@ -81,75 +131,6 @@ def maxpool(x, ksize=3, stride=2):
                           padding='SAME')
 
 
-def model_conv(x, num_classes=10):
-    ksize = 3
-    stride = 1
-    conv_filters_out = 96
-    activation = tf.nn.relu
-
-    with tf.variable_scope('layer1'):
-        x = conv(x, ksize, stride, conv_filters_out)
-        x = activation(x)
-
-    with tf.variable_scope('layer2'):
-        x = conv(x, ksize, stride, conv_filters_out)
-        x = activation(x)
-
-    with tf.variable_scope('layer3'):
-        stride = 2
-        x = conv(x, ksize, stride, conv_filters_out)
-        x = activation(x)
-        x = tf.layers.dropout(x)
-
-    with tf.variable_scope('layer4'):
-        conv_filters_out = 192
-        x = conv(x, ksize, stride, conv_filters_out)
-        x = activation(x)
-
-    with tf.variable_scope('layer5'):
-        conv_filters_out = 192
-        x = conv(x, ksize, stride, conv_filters_out)
-        x = activation(x)
-
-    with tf.variable_scope('layer6'):
-        conv_filters_out = 192
-        stride = 2
-        x = conv(x, ksize, stride, conv_filters_out)
-        x = activation(x)
-        x = tf.layers.dropout(x)
-
-    with tf.variable_scope('layer7'):
-        conv_filters_out = 192
-        x = conv(x, ksize, stride, conv_filters_out)
-        x = activation(x)
-
-    with tf.variable_scope('layer8'):
-        ksize = 1
-        conv_filters_out = 192
-        x = conv(x, ksize, stride, conv_filters_out)
-        x = activation(x)
-
-    with tf.variable_scope('layer9'):
-        ksize = 1
-        conv_filters_out = 10
-        x = conv(x, ksize, stride, conv_filters_out)
-        x = activation(x)
-
-    x = tf.reduce_mean(x, reduction_indices=[1, 2], name="avg_pool")
-
-    return x, None
-
-
-def model_loss(logits, labels):
-    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels)
-    cross_entropy_mean = tf.reduce_mean(cross_entropy)
-    regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-
-    loss_ = tf.add_n([cross_entropy_mean] + regularization_losses)
-    tf.summary.scalar('loss', loss_)
-    return loss_
-
-
 class ModelC(object):
     def __init__(self, dataset, batch_size=-1, learning_rate=1e-2, num_classes=10, quantizer=None):
         self.dataset = dataset
@@ -159,17 +140,17 @@ class ModelC(object):
         self.y_ = tf.placeholder(tf.float32, [batch_size, num_classes])
         # Build the graph for the deep net
 
-        self.y_conv, self.endpoint = model_conv(self.x, num_classes=num_classes)
+        self.logits = inference(self.x, is_training=True, num_classes=num_classes)
 
         with tf.name_scope('loss'):
-            self.cost = model_loss(logits=self.y_conv, labels=self.y_)
+            self.cost = loss(self.logits, self.y_)
 
         with tf.name_scope('optimizer'):
             self.optimizer = tf.train.AdamOptimizer(learning_rate)
             self.train_step = self.optimizer.minimize(self.cost)
 
         with tf.name_scope('accuracy'):
-            correct_prediction = tf.equal(tf.argmax(self.y_conv, 1),
+            correct_prediction = tf.equal(tf.argmax(self.logits, 1),
                                           tf.argmax(self.y_, 1))
             correct_prediction = tf.cast(correct_prediction, tf.float32)
         self.accuracy = tf.reduce_mean(correct_prediction)
