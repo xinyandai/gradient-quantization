@@ -331,6 +331,10 @@ class ResNet(object):
                              feed_dict={self.x: x,
                                         self.y_: y})
 
+    def batch_normalization(self, x, y):
+        return self.sess.run([self._extra_train_ops], feed_dict={self.x: x,
+                                        self.y_: y})
+
     def apply_gradients(self, gradients):
         feed_dict = {}
         for i in range(len(self.grads_placeholder)):
@@ -364,10 +368,14 @@ if __name__ == '__main__':
             xs, ys = dataset.train.next_batch(batch_size)
             gradients = net.compute_gradients(xs, ys)
             net.apply_gradients(gradients)
+            net.batch_normalization(xs, ys)
 
             if i % 10 == 0:
                 # Evaluate the current model.
                 test_xs, test_ys = dataset.test.next_batch(batch_size)
                 loss, accuracy = net.compute_loss_accuracy(test_xs, test_ys)
-                print("%d, %.3f, %.3f, %.3f" % (i, timer.toc(), loss, accuracy))
+                valid_xs, valid_ys = dataset.valid.next_batch(batch_size)
+                valid_loss, valid_accuracy = net.compute_loss_accuracy(valid_xs, valid_ys)
+                print("%d, %.3f, %.3f, %.3f, %.3f, %.3f" %
+                      (i, timer.toc(), loss, accuracy, valid_loss, valid_accuracy))
             i += 1
