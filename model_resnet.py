@@ -161,14 +161,12 @@ class ResNet(object):
             for grad in self.grads
         ]
         self.apply_grads_placeholder = self.optimizer.apply_gradients(
-            self.grads_placeholder)
+            self.grads_placeholder, global_step=self.global_step)
 
         self.variables = tf_variables.TensorFlowVariables(self.cost, self.sess)
 
         # apply_op = self.optimizer.minimize(self.cost, global_step=self.global_step)
-        # logging.info(" apply ops : {}".format(apply_op))
         # train_ops = [apply_op] + self._extra_train_ops
-        # logging.info(" train ops : {}".format(train_ops))
         # self.train_op = tf.group(*train_ops)
         # self.variables = tf_variables.TensorFlowVariables(self.train_op)
 
