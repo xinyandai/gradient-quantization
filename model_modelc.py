@@ -11,28 +11,74 @@ import logging
 
 import tf_variables
 
+MOVING_AVERAGE_DECAY = 0.9997
+BN_DECAY = MOVING_AVERAGE_DECAY
+BN_EPSILON = 0.001
+CONV_WEIGHT_DECAY = 0.00004
+CONV_WEIGHT_STDDEV = 0.1
+FC_WEIGHT_DECAY = 0.00004
+FC_WEIGHT_STDDEV = 0.01
+MODELC_VARIABLES = 'modelc_variables'
+UPDATE_OPS_COLLECTION = 'modelc_update_ops'  # must be grouped with training op
+IMAGENET_MEAN_BGR = [103.062623801, 115.902882574, 123.151630838, ]
+
+
+def fc(x, c):
+    num_units_in = x.get_shape()[1]
+    num_units_out = c['fc_units_out']
+    weights_initializer = tf.truncated_normal_initializer(
+        stddev=FC_WEIGHT_STDDEV)
+
+    weights = _get_variable('weights',
+                            shape=[num_units_in, num_units_out],
+                            initializer=weights_initializer,
+                            weight_decay=FC_WEIGHT_STDDEV)
+    biases = _get_variable('biases',
+                           shape=[num_units_out],
+                           initializer=tf.zeros_initializer)
+    x = tf.nn.xw_plus_b(x, weights, biases)
+    return x
+
 
 def _get_variable(name,
                   shape,
                   initializer,
+                  weight_decay=0.0,
                   dtype='float',
                   trainable=True):
     "A little wrapper around tf.get_variable to do weight decay and add to"
     "resnet collection"
-
+    if weight_decay > 0:
+        regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
+    else:
+        regularizer = None
+    collections = [tf.GraphKeys.GLOBAL_VARIABLES, MODELC_VARIABLES]
     return tf.get_variable(name,
                            shape=shape,
                            initializer=initializer,
                            dtype=dtype,
+                           regularizer=regularizer,
+                           collections=collections,
                            trainable=trainable)
 
 
 def conv(x, ksize, stride, filters_out):
     filters_in = x.get_shape()[-1]
     shape = [ksize, ksize, filters_in, filters_out]
-    weights = tf.get_variable('weights', shape=shape, dtype='float')
-
+    initializer = tf.truncated_normal_initializer(stddev=CONV_WEIGHT_STDDEV)
+    weights = _get_variable('weights',
+                        shape=shape,
+                        dtype='float',
+                        initializer=initializer,
+                        weight_decay=CONV_WEIGHT_DECAY)
     return tf.nn.conv2d(x, weights, [1, stride, stride, 1], padding='SAME')
+
+
+def maxpool(x, ksize=3, stride=2):
+    return tf.nn.max_pool(x,
+                          ksize=[1, ksize, ksize, 1],
+                          strides=[1, stride, stride, 1],
+                          padding='SAME')
 
 
 def model_conv(x, num_classes=10):
@@ -53,6 +99,7 @@ def model_conv(x, num_classes=10):
         stride = 2
         x = conv(x, ksize, stride, conv_filters_out)
         x = activation(x)
+        x = tf.layers.dropout(x)
 
     with tf.variable_scope('layer4'):
         conv_filters_out = 192
@@ -69,6 +116,7 @@ def model_conv(x, num_classes=10):
         stride = 2
         x = conv(x, ksize, stride, conv_filters_out)
         x = activation(x)
+        x = tf.layers.dropout(x)
 
     with tf.variable_scope('layer7'):
         conv_filters_out = 192
@@ -92,6 +140,16 @@ def model_conv(x, num_classes=10):
     return x, None
 
 
+def model_loss(logits, labels):
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels)
+    cross_entropy_mean = tf.reduce_mean(cross_entropy)
+    regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+
+    loss_ = tf.add_n([cross_entropy_mean] + regularization_losses)
+    tf.summary.scalar('loss', loss_)
+    return loss_
+
+
 class ModelC(object):
     def __init__(self, dataset, batch_size=-1, learning_rate=1e-2, num_classes=10, quantizer=None):
         self.dataset = dataset
@@ -104,13 +162,11 @@ class ModelC(object):
         self.y_conv, self.endpoint = model_conv(self.x, num_classes=num_classes)
 
         with tf.name_scope('loss'):
-            cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
-                labels=self.y_, logits=self.y_conv)
-        self.cross_entropy = tf.reduce_mean(cross_entropy)
+            self.cost = model_loss(logits=self.y_conv, labels=self.y_)
 
         with tf.name_scope('optimizer'):
-            self.optimizer = tf.train.GradientDescentOptimizer(learning_rate)
-            self.train_step = self.optimizer.minimize(self.cross_entropy)
+            self.optimizer = tf.train.AdamOptimizer(learning_rate)
+            self.train_step = self.optimizer.minimize(self.cost)
 
         with tf.name_scope('accuracy'):
             correct_prediction = tf.equal(tf.argmax(self.y_conv, 1),
@@ -128,9 +184,9 @@ class ModelC(object):
 
         # Helper values.
         self.variables = tf_variables.TensorFlowVariables(
-            self.cross_entropy, self.sess)
+            self.cost, self.sess)
         self.grads = self.optimizer.compute_gradients(
-            self.cross_entropy)
+            self.cost)
         self.grads_placeholder = [
             (tf.placeholder("float", shape=grad[1].get_shape()), grad[1])
             for grad in self.grads]
@@ -138,7 +194,6 @@ class ModelC(object):
             self.grads_placeholder)
         if quantizer is not None:
             self.quantizer = quantizer()
-
 
     def compute_gradients(self, x, y):
         return self.sess.run([grad[0] for grad in self.grads],
@@ -153,7 +208,40 @@ class ModelC(object):
         self.sess.run(self.apply_grads_placeholder, feed_dict=feed_dict)
 
     def compute_loss_accuracy(self, x, y):
-        return self.sess.run([self.cross_entropy, self.accuracy],
+        return self.sess.run([self.cost, self.accuracy],
                              feed_dict={self.x: x,
                                         self.y_: y,
                                         self.keep_prob: 1.0})
+
+
+if __name__ == '__main__':
+    import mpi_dataset
+    logging.basicConfig(level=logging.INFO)
+
+    batch_size = 128
+
+    dataset = mpi_dataset.download_cifar10_retry(0)
+    net = ModelC(dataset, batch_size)
+
+    i = 0
+    from myutils import Timer
+
+    timer = Timer()
+    print("Iteration, time, loss, accuracy")
+    while True:
+        # Compute and apply gradients.
+        for _ in range(10):
+
+            xs, ys = dataset.train.next_batch(batch_size)
+            gradients = net.compute_gradients(xs, ys)
+            net.apply_gradients(gradients)
+
+            if i % 100 == 0:
+                # Evaluate the current model.
+                test_xs, test_ys = dataset.test.next_batch(batch_size)
+                loss, accuracy = net.compute_loss_accuracy(test_xs, test_ys)
+                valid_xs, valid_ys = dataset.valid.next_batch(batch_size)
+                valid_loss, valid_accuracy = net.compute_loss_accuracy(valid_xs, valid_ys)
+                print("%d, %.3f, %.3f, %.3f, %.3f, %.3f" %
+                      (i, timer.toc(), loss, accuracy, valid_loss, valid_accuracy))
+            i += 1
