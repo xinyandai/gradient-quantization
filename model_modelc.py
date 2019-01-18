@@ -25,7 +25,7 @@ IMAGENET_MEAN_BGR = [103.062623801, 115.902882574, 123.151630838, ]
 activation = tf.nn.relu
 
 
-def inference(x, is_training, use_bias=True, num_classes=10):
+def inference(x, is_training, use_bias=True, num_classes=10, keep_prob=0.5):
     c = dict()
     c['is_training'] = tf.convert_to_tensor(is_training, dtype='bool', name='is_training')
     c['use_bias'] = use_bias
@@ -44,6 +44,7 @@ def inference(x, is_training, use_bias=True, num_classes=10):
         c['stride'] = 2
         x = conv(x,c)
         x = activation(x)
+        x = tf.layers.dropout(x, keep_prob)
     with tf.variable_scope('layer4'):
         c['conv_filters_out'] = 192
         x = conv(x,c)
@@ -58,6 +59,7 @@ def inference(x, is_training, use_bias=True, num_classes=10):
         c['stride'] = 2
         x = conv(x, c)
         x = activation(x)
+        x = tf.layers.dropout(x, keep_prob)
     with tf.variable_scope('layer7'):
         c['conv_filters_out'] = 192
         x = conv(x, c)
@@ -140,7 +142,7 @@ class ModelC(object):
         self.y_ = tf.placeholder(tf.float32, [batch_size, num_classes])
 
         # Build the graph for the deep net
-        self.logits = inference(self.x, is_training=True, num_classes=num_classes)
+        self.logits = inference(self.x, is_training=True, num_classes=num_classes, keep_prob=self.keep_prob)
 
         with tf.name_scope('loss'):
             self.cost = loss(self.logits, self.y_)
