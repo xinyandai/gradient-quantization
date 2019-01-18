@@ -19,8 +19,10 @@ class BatchDataset(object):
         assert len(x) == len(y)
 
         self.i = 0
+        self.epoch = 0
         self.size = len(x)
         self.x = x.copy()
+        self.x_origin = self.x.copy()
 
         if one_hot:
             if num_classes == -1:
@@ -31,15 +33,12 @@ class BatchDataset(object):
 
         # shuffle
         np.random.seed(seed)
-        self.idx = np.arange(self.size)
-        np.random.shuffle(self.idx)
-        self.x[:] = self.x[self.idx]
-        self.y[:] = self.y[self.idx]
+        self.shuffle()
 
         _, self.width, self.height, self.channels = np.shape(self.x)
         self.distort = distort
         self.distort_sess = tf.Session()
-        self.x_origin = self.x.copy()
+
         # standardization
         self.x = self.distort_sess.run(
             self._distort_ops(distort=False),
@@ -50,6 +49,13 @@ class BatchDataset(object):
 
     def distort_images(self):
         self.x = self.distort_sess.run(self.distorted_image, feed_dict={self.image: self.x_origin})
+
+    def shuffle(self):
+        idx = np.arange(self.size)
+        np.random.shuffle(idx)
+        self.x[:] = self.x[idx]
+        self.y[:] = self.y[idx]
+        self.x_origin[:] = self.x_origin[idx]
 
     def _distort_ops(self, distort):
         # Image processing for training the network. Note the many random
@@ -80,12 +86,17 @@ class BatchDataset(object):
 
         return float_image
 
+    def epoch_handle(self):
+        self.epoch += 1
+        self.shuffle()
+        if self.distort and self.epoch > 5 and self.epoch % 2 == 0:
+            self.distort_images()
+
     def next_batch(self, batch_size):
         assert batch_size > 0
         batch = (self.x[self.i:self.i + batch_size, :], self.y[self.i: self.i + batch_size, :])
         if self.i + batch_size >= self.size:
-            if self.distort:
-                self.distort_images()
+            self.epoch_handle()
             self.i = batch_size + self.i - self.size
             padding = (self.x[0:self.i, :], self.y[0: self.i, :])
             return (
