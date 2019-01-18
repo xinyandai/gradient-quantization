@@ -22,8 +22,6 @@ class BatchDataset(object):
         self.size = len(x)
         self.x = x.copy()
 
-        _, self.width, self.height, self.channels = np.shape(self.x)
-
         if one_hot:
             if num_classes == -1:
                 num_classes = np.max(y) + 1
@@ -31,41 +29,51 @@ class BatchDataset(object):
         else:
             self.y = y.copy()
 
+        # shuffle
         np.random.seed(seed)
         self.idx = np.arange(self.size)
         np.random.shuffle(self.idx)
         self.x[:] = self.x[self.idx]
         self.y[:] = self.y[self.idx]
 
-        if distort:
-            self.distort = distort
-            self.x_ref = self.x.copy()
-            self.distorted_image = self._distort_ops()
-            self.distort_sess = tf.Session()
+        _, self.width, self.height, self.channels = np.shape(self.x)
+        self.distort = distort
+        self.distort_sess = tf.Session()
+        self.x_origin = self.x.copy()
+        # standardization
+        self.x = self.distort_sess.run(
+            self._distort_ops(distort=False),
+            feed_dict={self.image: self.x_origin})
+        # distort
+        if self.distort:
+            self.distorted_image = self._distort_ops(distort=self.distort)
 
     def distort_images(self):
-        self.x = self.distort_sess.run(self.distorted_image, feed_dict={self.image: self.x_ref})
+        self.x = self.distort_sess.run(self.distorted_image, feed_dict={self.image: self.x_origin})
 
-    def _distort_ops(self):
+    def _distort_ops(self, distort):
         # Image processing for training the network. Note the many random
         # distortions applied to the image.
         self.image = tf.placeholder(tf.float32, [None, self.width, self.height, self.channels])
         # Randomly crop a [height, width] section of the image.
         distorted_image = tf.map_fn(
             lambda img: tf.random_crop(img, [self.height, self.width, self.channels]), self.image)
-        # Randomly flip the image horizontally.
-        distorted_image = tf.map_fn(
-            lambda img: tf.image.random_flip_left_right(img), distorted_image)
-        # Because these operations are not commutative, consider randomizing
-        # the order their operation.
-        distorted_image = tf.map_fn(
-            lambda img: tf.image.random_brightness(img, max_delta=63), distorted_image
-        )
-        distorted_image = tf.map_fn(
-            lambda img: tf.image.random_contrast(img, lower=0.2, upper=1.8), distorted_image
-        )
-        # Subtract off the mean and divide by the variance of the pixels.
-        # float_image = tf.image.per_image_whitening(distorted_image)
+
+        if distort:
+            # Randomly flip the image horizontally.
+            distorted_image = tf.map_fn(
+                lambda img: tf.image.random_flip_left_right(img), distorted_image)
+            # Because these operations are not commutative, consider randomizing
+            # the order their operation.
+            distorted_image = tf.map_fn(
+                lambda img: tf.image.random_brightness(img, max_delta=63), distorted_image
+            )
+            distorted_image = tf.map_fn(
+                lambda img: tf.image.random_contrast(img, lower=0.2, upper=1.8), distorted_image
+            )
+            # Subtract off the mean and divide by the variance of the pixels.
+            # float_image = tf.image.per_image_whitening(distorted_image)
+
         float_image = tf.map_fn(
             lambda img: tf.image.per_image_standardization(img), distorted_image
         )
@@ -94,7 +102,7 @@ def download_mnist_retry(seed):
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
     return Datasets(
-        BatchDataset(np.expand_dims(x_train, axis=3), y_train, num_classes, seed, distort=True),
+        BatchDataset(np.expand_dims(x_train, axis=3), y_train, num_classes, seed, distort=False),
         BatchDataset(np.expand_dims(x_train, axis=3), y_train, num_classes, seed, distort=False),
         BatchDataset(np.expand_dims(x_test, axis=3), y_test, num_classes, seed, distort=False)
     )

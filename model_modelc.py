@@ -132,14 +132,14 @@ def maxpool(x, ksize=3, stride=2):
 
 
 class ModelC(object):
-    def __init__(self, dataset, batch_size=-1, learning_rate=1e-2, num_classes=10, quantizer=None):
+    def __init__(self, dataset, batch_size=-1, learning_rate=1e-2, num_classes=10):
         self.dataset = dataset
         # probability of drop
         self.keep_prob = tf.placeholder(tf.float32)
         self.x = tf.placeholder(tf.float32, [batch_size, dataset.width, dataset.height, dataset.channels])
         self.y_ = tf.placeholder(tf.float32, [batch_size, num_classes])
-        # Build the graph for the deep net
 
+        # Build the graph for the deep net
         self.logits = inference(self.x, is_training=True, num_classes=num_classes)
 
         with tf.name_scope('loss'):
@@ -173,8 +173,6 @@ class ModelC(object):
             for grad in self.grads]
         self.apply_grads_placeholder = self.optimizer.apply_gradients(
             self.grads_placeholder)
-        if quantizer is not None:
-            self.quantizer = quantizer()
 
     def compute_gradients(self, x, y):
         return self.sess.run([grad[0] for grad in self.grads],
@@ -217,7 +215,7 @@ if __name__ == '__main__':
             gradients = net.compute_gradients(xs, ys)
             net.apply_gradients(gradients)
 
-            if i % 100 == 0:
+            if i % 10 == 0:
                 # Evaluate the current model.
                 test_xs, test_ys = dataset.test.next_batch(batch_size)
                 loss, accuracy = net.compute_loss_accuracy(test_xs, test_ys)
