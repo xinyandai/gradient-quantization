@@ -45,15 +45,23 @@ def load_network(args, seed=0, validation=False):
         dataset = mpi_dataset.download_mnist_retry(seed)
         network = TwoLayerNetwork
     elif args.network == 'resnet':
-        dataset = mpi_dataset.download_cifar10_retry(seed)
+        dataset = mpi_dataset.download_cifar10_retry(seed, True)
         network = ResNet
     elif args.network == 'modelC':
-        dataset = mpi_dataset.download_cifar10_retry(seed)
+        dataset = mpi_dataset.download_cifar10_retry(seed, True)
         network = ModelC
     else:
         assert False
     return network(dataset=dataset,
                    batch_size=args.test_batch_size if validation else args.batch_size,)
+
+
+class IdenticalCompressor(object):
+    def compress(self, gradient):
+        return gradient
+
+    def decompress(self, gradient):
+        return gradient
 
 
 class RandomCodebookCompressor(object):
@@ -106,6 +114,7 @@ class RandomCodebookQuantizer(object):
                 tf.reshape(v, [-1]).shape.as_list()[0],
                 v.shape.as_list()
             )
+            if tf.reshape(v, [-1]).shape.as_list()[0] > 1000 else IdenticalCompressor()
             for _, v in placeholders.items()
         ]
 
