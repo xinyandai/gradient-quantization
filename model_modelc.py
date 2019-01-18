@@ -137,9 +137,16 @@ class ModelC(object):
     def __init__(self, dataset, batch_size=-1, learning_rate=1e-2, num_classes=10):
         self.dataset = dataset
         # probability of drop
+        self.global_step = tf.Variable(0, trainable=False)
         self.keep_prob = tf.placeholder(tf.float32)
         self.x = tf.placeholder(tf.float32, [batch_size, dataset.width, dataset.height, dataset.channels])
         self.y_ = tf.placeholder(tf.float32, [batch_size, num_classes])
+
+        boundaries = [int(10000 * i) for i in range(2, 4)]
+        values = [0.01, 0.001, 0.0001]
+        self.lrn_rate = tf.train.piecewise_constant(self.global_step,
+                                                    boundaries, values)
+        tf.summary.scalar('learning rate', self.lrn_rate)
 
         # Build the graph for the deep net
         self.logits = inference(self.x, is_training=True, num_classes=num_classes, keep_prob=self.keep_prob)
@@ -148,7 +155,7 @@ class ModelC(object):
             self.cost = loss(self.logits, self.y_)
 
         with tf.name_scope('optimizer'):
-            self.optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+            self.optimizer = tf.train.GradientDescentOptimizer(self.lrn_rate)
             self.train_step = self.optimizer.minimize(self.cost)
 
         with tf.name_scope('accuracy'):
@@ -174,7 +181,7 @@ class ModelC(object):
             (tf.placeholder("float", shape=grad[1].get_shape()), grad[1])
             for grad in self.grads]
         self.apply_grads_placeholder = self.optimizer.apply_gradients(
-            self.grads_placeholder)
+            self.grads_placeholder, global_step=self.global_step)
 
     def compute_gradients(self, x, y):
         return self.sess.run([grad[0] for grad in self.grads],
