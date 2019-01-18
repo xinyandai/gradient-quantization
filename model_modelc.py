@@ -146,7 +146,7 @@ class ModelC(object):
             self.cost = loss(self.logits, self.y_)
 
         with tf.name_scope('optimizer'):
-            self.optimizer = tf.train.AdamOptimizer(learning_rate)
+            self.optimizer = tf.train.GradientDescentOptimizer(learning_rate)
             self.train_step = self.optimizer.minimize(self.cost)
 
         with tf.name_scope('accuracy'):
@@ -195,9 +195,11 @@ class ModelC(object):
 
 if __name__ == '__main__':
     import mpi_dataset
+    import numpy as np
     logging.basicConfig(level=logging.INFO)
 
-    batch_size = 128
+    batch_size = 32
+    test_batch_size = 1024
 
     dataset = mpi_dataset.download_cifar10_retry(0)
     net = ModelC(dataset, batch_size)
@@ -206,7 +208,7 @@ if __name__ == '__main__':
     from myutils import Timer
 
     timer = Timer()
-    print("Iteration, time, loss, accuracy")
+
     while True:
         # Compute and apply gradients.
         for _ in range(10):
@@ -215,12 +217,26 @@ if __name__ == '__main__':
             gradients = net.compute_gradients(xs, ys)
             net.apply_gradients(gradients)
 
-            if i % 10 == 0:
+            if i % 50 == 0:
                 # Evaluate the current model.
-                test_xs, test_ys = dataset.test.next_batch(batch_size)
-                loss, accuracy = net.compute_loss_accuracy(test_xs, test_ys)
-                valid_xs, valid_ys = dataset.valid.next_batch(batch_size)
-                valid_loss, valid_accuracy = net.compute_loss_accuracy(valid_xs, valid_ys)
-                print("%d, %.3f, %.3f, %.3f, %.3f, %.3f" %
-                      (i, timer.toc(), loss, accuracy, valid_loss, valid_accuracy))
+                def test_loss_accuracy():
+                    test_xs, test_ys = dataset.test.next_batch(batch_size)
+                    loss, accuracy = net.compute_loss_accuracy(test_xs, test_ys)
+                    return loss, accuracy
+
+                def train_loss_accuracy():
+                    valid_xs, valid_ys = dataset.valid.next_batch(batch_size)
+                    valid_loss, valid_accuracy = net.compute_loss_accuracy(valid_xs, valid_ys)
+                    return valid_loss, valid_accuracy
+
+                test_accuracy = [
+                    test_loss_accuracy() for _ in range(test_batch_size // batch_size + 1)
+                ]
+                train_accuracy = [
+                    train_loss_accuracy() for _ in range(test_batch_size // batch_size + 1)
+                ]
+                ts_loss, ts_accuracy = np.mean(np.array(test_accuracy).reshape((-1, 2)), axis=0)
+                tr_loss, tr_accuracy = np.mean(np.array(train_accuracy).reshape((-1, 2)), axis=0)
+                print("%d, %.3f, %.3f, %.3f, %.3f, %.3f" % (i, timer.toc(), ts_loss, ts_accuracy, tr_loss, tr_accuracy))
+
             i += 1

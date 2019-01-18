@@ -97,25 +97,25 @@ class BatchDataset(object):
             return batch
 
 
-def download_mnist_retry(seed):
+def download_mnist_retry(seed, distort=False):
     num_classes = 10
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
     return Datasets(
-        BatchDataset(np.expand_dims(x_train, axis=3), y_train, num_classes, seed, distort=False),
+        BatchDataset(np.expand_dims(x_train, axis=3), y_train, num_classes, seed, distort=distort),
         BatchDataset(np.expand_dims(x_train, axis=3), y_train, num_classes, seed, distort=False),
         BatchDataset(np.expand_dims(x_test, axis=3), y_test, num_classes, seed, distort=False)
     )
 
 
-def download_cifar10_retry(seed):
+def download_cifar10_retry(seed, distort=False):
     num_classes = 10
     # (50000, 32, 32, 3)  (50000, 1)
     # (10000, 32, 32, 3)  (10000, 1)
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.cifar10.load_data()
     x_train, x_test = x_train / 255.0, x_test / 255.0
     return Datasets(
-        BatchDataset(x_train, y_train.flatten(), num_classes, seed, distort=True),
+        BatchDataset(x_train, y_train.flatten(), num_classes, seed, distort=distort),
         BatchDataset(x_train, y_train.flatten(), num_classes, seed, distort=False),
         BatchDataset(x_test, y_test.flatten(), num_classes, seed, distort=False)
     )
