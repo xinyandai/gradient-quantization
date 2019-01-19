@@ -25,15 +25,15 @@ from quantizer_random_codebook import RandomCodebookQuantizer
 Quantizer = None
 parser = argparse.ArgumentParser(description="Run the synchronous parameter "
                                              "server example.")
-parser.add_argument("--num-workers", default=100, type=int,
+parser.add_argument("--num-workers", required=True, type=int,
                     help="The number of workers to use.")
-parser.add_argument("--quantizer", default='random_codebook', type=str,
+parser.add_argument("--quantizer", required=True, type=str,
                     help="Compressor for gradient.")
-parser.add_argument("--two-phases", default=True, type=bool,
+parser.add_argument("--two-phases", required=True, type=bool,
                     help="Using 2-phases quantization.")
-parser.add_argument("--network", default="modelC", type=str,
+parser.add_argument("--network", required=True, type=str,
                     help="Network architectures")
-parser.add_argument("--batch-size", default=1, type=int,
+parser.add_argument("--batch-size", required=True, type=int,
                     help="batch size.")
 parser.add_argument("--test-batch-size", default=1024, type=int,
                     help="test batch size.")
@@ -119,7 +119,7 @@ if __name__ == "__main__":
             gradients = [worker.compute_gradients() for _ in range(args.num_workers)]
             worker.apply_gradients(gradients)
 
-            if i % 100 == 0:
+            if i % 10 == 0:
                 test_accuracy = [
                     worker.test_loss_accuracy() for _ in range(args.test_batch_size // args.batch_size + 1)
                 ]

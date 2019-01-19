@@ -24,19 +24,19 @@ from quantizer_random_codebook import RandomCodebookQuantizer
 Quantizer = None
 parser = argparse.ArgumentParser(description="Run the synchronous parameter "
                                              "server example.")
-parser.add_argument("--num-workers", default=1, type=int,
+parser.add_argument("--num-workers", required=True, type=int,
                     help="The number of workers to use.")
-parser.add_argument("--redis-address", default=None, type=str,
+parser.add_argument("--redis-address", required=True, type=str,
                     help="The Redis address of the cluster.")
-parser.add_argument("--quantizer", default='identical', type=str,
+parser.add_argument("--quantizer", required=True, type=str,
                     help="Compressor for gradient.")
-parser.add_argument("--two-phases", default=True, type=bool,
+parser.add_argument("--two-phases", required=True, type=bool,
                     help="Using 2-phases quantization.")
-parser.add_argument("--network", default="two_layer", type=str,
+parser.add_argument("--network", required=True, type=str,
                     help="Network architectures")
-parser.add_argument("--batch-size", default=32, type=int,
+parser.add_argument("--batch-size", required=True, type=int,
                     help="batch size.")
-parser.add_argument("--test-batch-size", default=4096, type=int,
+parser.add_argument("--test-batch-size", default=1024, type=int,
                     help="test batch size.")
 
 
