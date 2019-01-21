@@ -8,6 +8,7 @@ import mpi_dataset
 import tensorflow as tf
 import numpy as np
 
+from scipy import stats
 from vecs_io import fvecs_read
 from myutils import normalize
 from myutils import Timer
@@ -106,7 +107,10 @@ class RandomCodebookCompressor(object):
         self.norm_quantizer = ScalarCompressor(s, True)
         assert size % self.dim == 0, \
             "dimension of variable should be smaller than {} or dividable by {}".format(self.dim, self.dim)
-        _, self.codewords = normalize(fvecs_read('./codebook/angular_dim_{}_Ks_{}.fvecs'.format(self.dim, self.Ks)))
+        if self.dim == self.Ks:
+            self.codewords = stats.ortho_group.rvs(self.dim)
+        else:
+            _, self.codewords = normalize(fvecs_read('./codebook/angular_dim_{}_Ks_{}.fvecs'.format(self.dim, self.Ks)))
         self.c = self.codewords.T
         self.c_dagger = np.linalg.pinv(self.c)
         self.codewords = np.concatenate((self.codewords, -self.codewords))
