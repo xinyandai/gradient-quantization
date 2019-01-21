@@ -108,7 +108,7 @@ class RandomCodebookCompressor(object):
         assert size % self.dim == 0, \
             "dimension of variable should be smaller than {} or dividable by {}".format(self.dim, self.dim)
         if self.dim == self.Ks:
-            self.codewords = stats.ortho_group.rvs(self.dim)
+            self.codewords = stats.ortho_group.rvs(self.dim).astype(np.float32)
         else:
             _, self.codewords = normalize(fvecs_read('./codebook/angular_dim_{}_Ks_{}.fvecs'.format(self.dim, self.Ks)))
         self.c = self.codewords.T
