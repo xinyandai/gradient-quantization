@@ -78,6 +78,8 @@ class ScalarCompressor(object):
     def compress(self, vec):
         lower_bound = np.min(vec)
         upper_bound = np.max(vec)
+        if lower_bound - upper_bound == 0.0:
+            return lower_bound, upper_bound, np.zeros_like(vec).astype(np.int32)
         scaled_vec = np.abs((vec - lower_bound) / (upper_bound - lower_bound)) * self.s
         l = np.array(scaled_vec).clip(0, self.s-1).astype(dtype=np.int32)
 
