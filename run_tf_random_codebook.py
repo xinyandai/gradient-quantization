@@ -29,6 +29,12 @@ parser.add_argument("--network", required=True, type=str,
                     help="Network architectures")
 parser.add_argument("--batch-size", required=True, type=int,
                     help="batch size.")
+parser.add_argument("--norm-level", required=True, type=int,
+                    help="norm quantization level.")
+parser.add_argument("--sub-dimension", required=True, type=int,
+                    help="sub dimension.")
+parser.add_argument("--num-codebook", required=True, type=int,
+                    help="sub dimension.")
 parser.add_argument("--test-batch-size", default=1024, type=int,
                     help="test batch size.")
 
@@ -63,15 +69,41 @@ class IdenticalCompressor(object):
         return gradient
 
 
+class ScalarCompressor(object):
+    def __init__(self, s, random):
+        self.s = s
+        self.random = random
+
+    def compress(self, vec):
+        lower_bound = np.min(vec)
+        upper_bound = np.max(vec)
+        scaled_vec = np.abs((vec - lower_bound) / (upper_bound - lower_bound)) * self.s
+        l = np.array(scaled_vec).clip(0, self.s-1).astype(dtype=np.int32)
+
+        if self.random:
+            # l[i] <- l[i] + 1 with probability |v_i| / ||v|| * s - l
+            probabilities = scaled_vec - l
+            l[:] += probabilities > np.random.uniform(0, 1, l.shape)
+
+        return lower_bound, upper_bound, l
+
+    def decompress(self, signature):
+        [lower_bound, upper_bound, l] = signature
+        scaled_vec = l.astype(dtype=np.float32)
+        compressed = scaled_vec / self.s * (upper_bound - lower_bound) + lower_bound
+        return compressed
+
+
 class RandomCodebookCompressor(object):
-    def __init__(self, size, shape, c_dim=32, k=128):
-        self.Ks = k // 2
+    def __init__(self, size, shape, c_dim, k, s):
+        self.Ks = k
         self.size = size
         self.shape = shape
         self.dim = c_dim if self.size >= c_dim else self.size
-        self.code_dtype = np.uint8 if self.Ks <= 2 ** 8 else (np.uint16 if self.Ks <= 2 ** 16 else np.uint32)
+        self.code_dtype = np.uint32
 
         self.M = size // self.dim
+        self.norm_quantizer = ScalarCompressor(s, True)
         assert size % self.dim == 0, \
             "dimension of variable should be smaller than {} or dividable by {}".format(self.dim, self.dim)
         _, self.codewords = normalize(fvecs_read('./codebook/angular_dim_{}_Ks_{}.fvecs'.format(self.dim, self.Ks)))
@@ -97,6 +129,9 @@ class RandomCodebookCompressor(object):
 
     def decompress(self, signature):
         [norms, codes] = signature
+
+        norms = self.norm_quantizer.decompress(self.norm_quantizer.compress(norms))
+
         vec = np.empty((len(norms), self.dim), dtype=np.float32)
         vec[:, :] = self.codewords[codes[:], :]
         vec[:, :] = (vec.transpose() * norms).transpose()
@@ -105,13 +140,13 @@ class RandomCodebookCompressor(object):
 
 
 class RandomCodebookQuantizer(object):
-    def __init__(self, placeholders):
+    def __init__(self, placeholders, c_dim, k, s):
         self.placeholders = placeholders
         self.layers = len(placeholders)
         self.pqs = [
             RandomCodebookCompressor(
                 tf.reshape(v, [-1]).shape.as_list()[0],
-                v.shape.as_list()
+                v.shape.as_list(), c_dim, k, s
             )
             if tf.reshape(v, [-1]).shape.as_list()[0] > 1000 else IdenticalCompressor()
             for _, v in placeholders.items()
@@ -156,7 +191,7 @@ class Worker(object):
             self.net = load_network(args, seed=worker_index)
             self.batch_size = args.batch_size
             self.dataset = self.net.dataset
-            self.quantizer = Quantizer(self.net.variables.placeholders)
+            self.quantizer = Quantizer(self.net.variables.placeholders, args.sub_dimension, args.num_codebook, args.norm_level)
 
     def compute_gradients(self):
         xs, ys = self.dataset.train.next_batch(self.batch_size)
