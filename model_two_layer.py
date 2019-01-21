@@ -59,13 +59,18 @@ def bias_variable(shape):
 
 
 class TwoLayerNetwork(object):
-    def __init__(self, dataset, batch_size=-1, learning_rate=1e-2, num_classes=10):
+    def __init__(self, dataset, batch_size=-1, learning_rate=1e-3, num_classes=10):
         self.dataset = dataset
         # probability of drop
         self.keep_prob = tf.placeholder(tf.float32)
         self.x = tf.placeholder(tf.float32, [None, dataset.width, dataset.height, dataset.channels])
         self.y_ = tf.placeholder(tf.float32, [None, num_classes])
         # Build the graph for the deep net
+        self.global_step = tf.Variable(0, trainable=False)
+        boundaries = [1000, 3000, 6000, 10000]
+        values = [0.01, 0.005, 0.001, 0.0001, 0.00001]
+        self.lrn_rate = tf.train.piecewise_constant(self.global_step,
+                                                    boundaries, values)
         self.y_conv, self.endpoint = two_layer(
             self.x, num_classes=num_classes, dropout_keep_prob=self.keep_prob)
         logging.debug("shape of output: {}".format(self.y_conv))
@@ -102,7 +107,7 @@ class TwoLayerNetwork(object):
             (tf.placeholder("float", shape=grad[1].get_shape()), grad[1])
             for grad in self.grads]
         self.apply_grads_placeholder = self.optimizer.apply_gradients(
-            self.grads_placeholder)
+            self.grads_placeholder, global_step=self.global_step)
 
 
     def compute_gradients(self, x, y):
