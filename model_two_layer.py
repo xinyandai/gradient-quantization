@@ -81,7 +81,7 @@ class TwoLayerNetwork(object):
         self.cross_entropy = tf.reduce_mean(cross_entropy)
 
         with tf.name_scope('optimizer'):
-            self.optimizer = tf.train.GradientDescentOptimizer(learning_rate)
+            self.optimizer = tf.train.GradientDescentOptimizer(self.lrn_rate)
             self.train_step = self.optimizer.minimize(self.cross_entropy)
 
         with tf.name_scope('accuracy'):
