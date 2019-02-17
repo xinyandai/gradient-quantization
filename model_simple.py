@@ -102,7 +102,8 @@ class SimpleCNN(object):
         self.dataset = dataset
         # probability of drop
         self.keep_prob = tf.placeholder(tf.float32)
-        self.x = tf.placeholder(tf.float32, [None, dataset.width, dataset.height, dataset.channels])
+        self.x = tf.placeholder(
+            tf.float32, [None, dataset.width, dataset.height, dataset.channels])
         self.y_ = tf.placeholder(tf.float32, [None, num_classes])
         # Build the graph for the deep net
         self.y_conv, self.endpoint = deepnn(
@@ -142,7 +143,6 @@ class SimpleCNN(object):
             for grad in self.grads]
         self.apply_grads_placeholder = self.optimizer.apply_gradients(
             self.grads_placeholder)
-
 
     def compute_gradients(self, x, y):
         return self.sess.run([grad[0] for grad in self.grads],

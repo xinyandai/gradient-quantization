@@ -10,3 +10,7 @@ gen
 # Added by Candy
 __pycache__/*
 .DS_Store
+
+#
+
+.vscode/

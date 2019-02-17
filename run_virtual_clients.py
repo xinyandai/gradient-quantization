@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import ray
+
 import argparse
 import mpi_dataset
 
@@ -89,7 +89,8 @@ class Worker(object):
         return loss_, accuracy_
 
     def train_loss_accuracy(self):
-        test_xs_, test_ys_ = self.dataset.valid.next_batch(self.args.batch_size)
+        test_xs_, test_ys_ = self.dataset.valid.next_batch(
+            self.args.batch_size)
         loss_, accuracy_ = self.net.compute_loss_accuracy(test_xs_, test_ys_)
         return loss_, accuracy_
 
@@ -114,19 +115,21 @@ if __name__ == "__main__":
     i = 0
     timer = Timer()
     while True:
-        for _ in range(10):
+        gradients = [worker.compute_gradients()
+                     for _ in range(args.num_workers)]
+        worker.apply_gradients(gradients)
 
-            gradients = [worker.compute_gradients() for _ in range(args.num_workers)]
-            worker.apply_gradients(gradients)
-
-            if i % 10 == 0:
-                test_accuracy = [
-                    worker.test_loss_accuracy() for _ in range(args.test_batch_size // args.batch_size + 1)
-                ]
-                train_accuracy = [
-                    worker.train_loss_accuracy() for _ in range(args.test_batch_size // args.batch_size + 1)
-                ]
-                ts_loss, ts_accuracy = np.mean(np.array(test_accuracy).reshape((-1, 2)), axis=0)
-                tr_loss, tr_accuracy = np.mean(np.array(train_accuracy).reshape((-1, 2)), axis=0)
-                print("%d, %.3f, %.3f, %.3f, %.3f, %.3f" % (i, timer.toc(), ts_loss, ts_accuracy, tr_loss, tr_accuracy))
-            i += 1
+        if i % 10 == 0:
+            test_accuracy = [
+                worker.test_loss_accuracy() for _ in range(args.test_batch_size // args.batch_size + 1)
+            ]
+            train_accuracy = [
+                worker.train_loss_accuracy() for _ in range(args.test_batch_size // args.batch_size + 1)
+            ]
+            ts_loss, ts_accuracy = np.mean(
+                np.array(test_accuracy).reshape((-1, 2)), axis=0)
+            tr_loss, tr_accuracy = np.mean(
+                np.array(train_accuracy).reshape((-1, 2)), axis=0)
+            print("%d, %.3f, %.3f, %.3f, %.3f, %.3f" %
+                  (i, timer.toc(), ts_loss, ts_accuracy, tr_loss, tr_accuracy))
+        i += 1
