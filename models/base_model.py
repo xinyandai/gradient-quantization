@@ -14,6 +14,7 @@ class BaseModel(object):
         self.keep_prob: tf.Tensor
         self.optimizer: tf.train.Optimizer
         self.loss: Tuple[tf.Tensor, tf.Tensor]
+        self.accuracy: tf.Tensor
         self.global_step: tf.Tensor
 
     def compute_gradients(self, x, y):
@@ -27,6 +28,12 @@ class BaseModel(object):
         for i in range(len(self.grads_placeholder)):
             feed_dict[self.grads_placeholder[i][0]] = gradients[i]
         self.sess.run(self.apply_grads_placeholder, feed_dict=feed_dict)
+
+    def compute_loss_accuracy(self, x, y):
+        return self.sess.run([self.loss, self.accuracy],
+                             feed_dict={self.x: x,
+                                        self.y_: y,
+                                        self.keep_prob: 1.0})
 
     def add_helper_vars(self):
         self.variables = tf_variables.TensorFlowVariables(

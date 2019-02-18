@@ -21,6 +21,8 @@ from quantizer_scalar import ScalarQuantizer
 from quantizer_codebook import CodebookQuantizer
 from quantizer_random_codebook import RandomCodebookQuantizer
 
+from models.fcn import FCN
+
 
 Quantizer = None
 parser = argparse.ArgumentParser(description="Run the synchronous parameter "
@@ -49,6 +51,9 @@ def load_network(args, seed=0, validation=False):
     elif args.network == 'two_layer':
         dataset = mpi_dataset.download_mnist_retry(seed)
         network = TwoLayerNetwork
+    elif args.network == 'fcn':
+        dataset = mpi_dataset.download_mnist_retry(seed)
+        network = FCN
     elif args.network == 'resnet':
         dataset = mpi_dataset.download_cifar10_retry(seed)
         network = ResNet
