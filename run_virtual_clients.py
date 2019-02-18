@@ -21,7 +21,7 @@ from quantizer_scalar import ScalarQuantizer
 from quantizer_codebook import CodebookQuantizer
 from quantizer_random_codebook import RandomCodebookQuantizer
 
-from models.fcn import FCN
+from models import FCN, CNN
 
 
 Quantizer = None
@@ -54,6 +54,9 @@ def load_network(args, seed=0, validation=False):
     elif args.network == 'fcn':
         dataset = mpi_dataset.download_mnist_retry(seed)
         network = FCN
+    elif args.network == 'cnn':
+        dataset = mpi_dataset.download_mnist_retry(seed)
+        network = CNN
     elif args.network == 'resnet':
         dataset = mpi_dataset.download_cifar10_retry(seed)
         network = ResNet
