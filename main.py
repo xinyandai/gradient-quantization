@@ -4,12 +4,10 @@ from __future__ import print_function
 
 
 import argparse
-import mpi_dataset
-
 import numpy as np
 
 from myutils import Timer
-
+import mpi_dataset
 from model_resnet import ResNet
 from model_modelc import ModelC
 
