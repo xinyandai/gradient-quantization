@@ -1,6 +1,6 @@
 import tensorflow as tf
 from typing import Tuple, List
-import tf_variables
+import utils.tf_variables as tf_variables
 
 
 class BaseModel(object):

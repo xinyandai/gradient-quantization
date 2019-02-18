@@ -1,7 +1,6 @@
 import numpy as np
 import tensorflow as tf
-
-from myutils import normalize
+from utils.helper_func import normalize
 from .base_quantizer import BaseQuantizer
 
 

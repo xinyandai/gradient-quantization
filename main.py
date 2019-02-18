@@ -6,14 +6,16 @@ from __future__ import print_function
 import argparse
 import numpy as np
 
-from myutils import Timer
 import mpi_dataset
+from utils.timer import Timer
+from utils.worker import Worker
+
 from model_resnet import ResNet
 from model_modelc import ModelC
 
 from models import FCN, CNN, LinearRegression
 from quantizers import IdenticalQuantizer, ScalarQuantizer, CodebookQuantizer, RandomCodebookQuantizer
-from worker import Worker
+
 
 parser = argparse.ArgumentParser(description="Run the synchronous parameter "
                                              "server example.")

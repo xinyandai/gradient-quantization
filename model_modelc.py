@@ -8,8 +8,7 @@ from __future__ import print_function
 
 import tensorflow as tf
 import logging
-
-import tf_variables
+import utils.tf_variables as tf_variables
 
 MOVING_AVERAGE_DECAY = 0.9997
 BN_DECAY = MOVING_AVERAGE_DECAY
@@ -27,7 +26,8 @@ activation = tf.nn.relu
 
 def inference(x, is_training, use_bias=True, num_classes=10, keep_prob=0.5):
     c = dict()
-    c['is_training'] = tf.convert_to_tensor(is_training, dtype='bool', name='is_training')
+    c['is_training'] = tf.convert_to_tensor(
+        is_training, dtype='bool', name='is_training')
     c['use_bias'] = use_bias
     c['fc_units_out'] = num_classes
     c['num_classes'] = num_classes
@@ -38,16 +38,16 @@ def inference(x, is_training, use_bias=True, num_classes=10, keep_prob=0.5):
         x = conv(x, c)
         x = activation(x)
     with tf.variable_scope('layer2'):
-        x = conv(x,c)
+        x = conv(x, c)
         x = activation(x)
     with tf.variable_scope('layer3'):
         c['stride'] = 2
-        x = conv(x,c)
+        x = conv(x, c)
         x = activation(x)
         x = tf.layers.dropout(x, keep_prob)
     with tf.variable_scope('layer4'):
         c['conv_filters_out'] = 192
-        x = conv(x,c)
+        x = conv(x, c)
         x = activation(x)
     with tf.variable_scope('layer5'):
         c['conv_filters_out'] = 192
@@ -79,9 +79,11 @@ def inference(x, is_training, use_bias=True, num_classes=10, keep_prob=0.5):
 
 
 def loss(logits, labels):
-    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels)
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
+        logits=logits, labels=labels)
     cross_entropy_mean = tf.reduce_mean(cross_entropy)
-    regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+    regularization_losses = tf.get_collection(
+        tf.GraphKeys.REGULARIZATION_LOSSES)
 
     loss_ = tf.add_n([cross_entropy_mean] + regularization_losses)
     tf.summary.scalar('loss', loss_)
@@ -119,10 +121,10 @@ def conv(x, c):
     shape = [ksize, ksize, filters_in, filters_out]
     initializer = tf.truncated_normal_initializer(stddev=CONV_WEIGHT_STDDEV)
     weights = _get_variable('weights',
-                        shape=shape,
-                        dtype='float',
-                        initializer=initializer,
-                        weight_decay=CONV_WEIGHT_DECAY)
+                            shape=shape,
+                            dtype='float',
+                            initializer=initializer,
+                            weight_decay=CONV_WEIGHT_DECAY)
     return tf.nn.conv2d(x, weights, [1, stride, stride, 1], padding='SAME')
 
 
@@ -139,7 +141,8 @@ class ModelC(object):
         # probability of drop
         self.global_step = tf.Variable(0, trainable=False)
         self.keep_prob = tf.placeholder(tf.float32)
-        self.x = tf.placeholder(tf.float32, [batch_size, dataset.width, dataset.height, dataset.channels])
+        self.x = tf.placeholder(
+            tf.float32, [batch_size, dataset.width, dataset.height, dataset.channels])
         self.y_ = tf.placeholder(tf.float32, [batch_size, num_classes])
 
         boundaries = [int(10000 * i) for i in range(2, 4)]
@@ -149,7 +152,8 @@ class ModelC(object):
         tf.summary.scalar('learning rate', self.lrn_rate)
 
         # Build the graph for the deep net
-        self.logits = inference(self.x, is_training=True, num_classes=num_classes, keep_prob=self.keep_prob)
+        self.logits = inference(
+            self.x, is_training=True, num_classes=num_classes, keep_prob=self.keep_prob)
 
         with tf.name_scope('loss'):
             self.cost = loss(self.logits, self.y_)
@@ -214,7 +218,7 @@ if __name__ == '__main__':
     net = ModelC(dataset, batch_size)
 
     i = 0
-    from myutils import Timer
+    from utils.timer import Timer
 
     timer = Timer()
 
@@ -230,12 +234,14 @@ if __name__ == '__main__':
                 # Evaluate the current model.
                 def test_loss_accuracy():
                     test_xs, test_ys = dataset.test.next_batch(batch_size)
-                    loss, accuracy = net.compute_loss_accuracy(test_xs, test_ys)
+                    loss, accuracy = net.compute_loss_accuracy(
+                        test_xs, test_ys)
                     return loss, accuracy
 
                 def train_loss_accuracy():
                     valid_xs, valid_ys = dataset.valid.next_batch(batch_size)
-                    valid_loss, valid_accuracy = net.compute_loss_accuracy(valid_xs, valid_ys)
+                    valid_loss, valid_accuracy = net.compute_loss_accuracy(
+                        valid_xs, valid_ys)
                     return valid_loss, valid_accuracy
 
                 test_accuracy = [
@@ -244,8 +250,11 @@ if __name__ == '__main__':
                 train_accuracy = [
                     train_loss_accuracy() for _ in range(test_batch_size // batch_size + 1)
                 ]
-                ts_loss, ts_accuracy = np.mean(np.array(test_accuracy).reshape((-1, 2)), axis=0)
-                tr_loss, tr_accuracy = np.mean(np.array(train_accuracy).reshape((-1, 2)), axis=0)
-                print("%d, %.3f, %.3f, %.3f, %.3f, %.3f" % (i, timer.toc(), ts_loss, ts_accuracy, tr_loss, tr_accuracy))
+                ts_loss, ts_accuracy = np.mean(
+                    np.array(test_accuracy).reshape((-1, 2)), axis=0)
+                tr_loss, tr_accuracy = np.mean(
+                    np.array(train_accuracy).reshape((-1, 2)), axis=0)
+                print("%d, %.3f, %.3f, %.3f, %.3f, %.3f" % (
+                    i, timer.toc(), ts_loss, ts_accuracy, tr_loss, tr_accuracy))
 
             i += 1

@@ -1,6 +1,6 @@
 import tensorflow as tf
 import logging
-import tf_variables
+import utils.tf_variables as tf_variables
 from .base_model import BaseModel
 from .base_ops import *
 

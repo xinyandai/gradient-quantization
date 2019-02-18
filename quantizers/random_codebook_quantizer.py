@@ -1,8 +1,8 @@
 import numpy as np
 import tensorflow as tf
 
-from vecs_io import fvecs_read
-from myutils import normalize
+from utils.vecs_io import fvecs_read
+from utils.helper_func import normalize
 
 
 class RandomCodebookQuantizer(object):
