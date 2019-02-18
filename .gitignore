@@ -11,8 +11,13 @@ gen
 __pycache__/*
 .DS_Store
 
-#
 
+
+
+
+
+#
 .vscode/
 *__pycache__*
 *.pytest*
+quickrun.*

@@ -12,9 +12,7 @@ from myutils import Timer
 
 from model_resnet import ResNet
 from model_modelc import ModelC
-from model_simple import SimpleCNN
 from model_lr import LinearRegression
-from model_two_layer import TwoLayerNetwork
 
 from models import FCN, CNN
 from quantizers import IdenticalQuantizer, ScalarQuantizer, CodebookQuantizer, RandomCodebookQuantizer
