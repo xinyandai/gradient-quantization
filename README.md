@@ -5,9 +5,7 @@
 * codebook quantization
 ## implementation 
 Before Run
+    `pip install tensorflow`
 
-    pip install ray
-    pip install tensorflow
-Run Ray
-
-    python ray_syn.py --quantizer codebook --num-workers 4  --two-phases True
+Run
+    `python main.py --num-workers 2 --quantizer identical --two-phases true --network cnn --batch-size 16`
