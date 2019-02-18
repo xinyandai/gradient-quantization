@@ -92,15 +92,7 @@ class FCN(BaseModel):
                 inter_op_parallelism_threads=1,
                 device_count={'GPU': 0})
         )
+        self.add_helper_vars()
         self.sess.run(tf.global_variables_initializer())
 
-        # Helper values.
-        self.variables = tf_variables.TensorFlowVariables(
-            self.loss, self.sess)
-        self.grads = self.optimizer.compute_gradients(
-            self.loss)
-        self.grads_placeholder = [
-            (tf.placeholder("float", shape=grad[1].get_shape()), grad[1])
-            for grad in self.grads]
-        self.apply_grads_placeholder = self.optimizer.apply_gradients(
-            self.grads_placeholder, global_step=self.global_step)
+
