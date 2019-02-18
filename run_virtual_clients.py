@@ -16,12 +16,8 @@ from model_simple import SimpleCNN
 from model_lr import LinearRegression
 from model_two_layer import TwoLayerNetwork
 
-from quantizer_identical import IdenticalQuantizer
-from quantizer_scalar import ScalarQuantizer
-from quantizer_codebook import CodebookQuantizer
-from quantizer_random_codebook import RandomCodebookQuantizer
-
 from models import FCN, CNN
+from quantizers import IdenticalQuantizer, ScalarQuantizer, CodebookQuantizer, RandomCodebookQuantizer
 
 
 Quantizer = None

@@ -3,6 +3,7 @@ import logging
 import tf_variables
 from .base_model import BaseModel
 
+
 def deepnn(x, num_classes=10, dropout_keep_prob=0.5):
     """deepnn builds the graph for a deep net for classifying digits.
 
@@ -88,7 +89,6 @@ def bias_variable(shape):
     return tf.Variable(initial)
 
 
-
 class CNN(BaseModel):
     def __init__(self, dataset, batch_size=-1, learning_rate=1e-2, num_classes=10):
         self.dataset = dataset
@@ -123,8 +123,5 @@ class CNN(BaseModel):
                 inter_op_parallelism_threads=1,
                 device_count={'GPU': 0})
         )
-        self.global_step = tf.Variable(0, trainable=False)
         self.add_helper_vars()
         self.sess.run(tf.global_variables_initializer())
-
-    

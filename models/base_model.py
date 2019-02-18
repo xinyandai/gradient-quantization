@@ -36,6 +36,7 @@ class BaseModel(object):
                                         self.keep_prob: 1.0})
 
     def add_helper_vars(self):
+        self.global_step = tf.Variable(0, trainable=False)
         self.variables = tf_variables.TensorFlowVariables(
             self.loss, self.sess)
         self.grads = self.optimizer.compute_gradients(

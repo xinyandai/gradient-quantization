@@ -1,8 +1,11 @@
+
 import numpy as np
+from .base_quantizer import BaseQuantizer
 
 
-class IdenticalQuantizer(object):
+class IdenticalQuantizer(BaseQuantizer):
     def __init__(self, placeholders):
+        super(IdenticalQuantizer).__init__()
         self.placeholders = placeholders
 
     def encode(self, gradient):
