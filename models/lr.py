@@ -11,7 +11,7 @@ import logging
 
 import utils.tf_variables as tf_variables
 from .base_model import BaseModel
-from .base_ops import *
+from .base_ops import weight_variable, bias_variable
 
 
 def learning_regression(x, num_classes=10, dropout_keep_prob=0.5):

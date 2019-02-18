@@ -9,11 +9,7 @@ import numpy as np
 import mpi_dataset
 from utils.timer import Timer
 from utils.worker import Worker
-
-from model_resnet import ResNet
-from model_modelc import ModelC
-
-from models import FCN, CNN, LinearRegression
+from models import FCN, CNN, LinearRegression, ResNet, ModelC
 from quantizers import IdenticalQuantizer, ScalarQuantizer, CodebookQuantizer, RandomCodebookQuantizer
 
 
@@ -87,18 +83,18 @@ def load_network(args, seed=0, validation=False):
 
 
 def load_quantizer(args, network):
-    Quantizer = None
+    quantizer = None
     if args.quantizer.lower() == 'identical':
-        Quantizer = IdenticalQuantizer
+        quantizer = IdenticalQuantizer
     elif args.quantizer.lower() == 'scalar':
-        Quantizer = ScalarQuantizer
+        quantizer = ScalarQuantizer
     elif args.quantizer.lower() == 'codebook':
-        Quantizer = CodebookQuantizer
+        quantizer = CodebookQuantizer
     elif args.quantizer.lower() == 'random_codebook':
-        Quantizer = RandomCodebookQuantizer
+        quantizer = RandomCodebookQuantizer
     else:
         assert False
-    return Quantizer(network.variables.placeholders)
+    return quantizer(network.variables.placeholders)
 
 
 if __name__ == "__main__":

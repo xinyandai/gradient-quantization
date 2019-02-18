@@ -15,10 +15,10 @@ from tensorflow.python.training import moving_averages
 from collections import namedtuple
 import numpy as np
 import tensorflow as tf
-
 import logging
 
-import tf_variables
+import utils.tf_variables as tf_variables
+from models import BaseModel
 
 
 HParams = namedtuple('HParams',
@@ -27,25 +27,27 @@ HParams = namedtuple('HParams',
                      'relu_leakiness, optimizer, num_gpus')
 
 
-class ResNet(object):
+class ResNet(BaseModel):
     """ResNet model."""
 
     def __init__(self, dataset, batch_size, num_classes=10, optimizer="sgd", mode='train', num_gpus=0):
         self.hps = HParams(
-                batch_size=batch_size,
-                num_classes=num_classes,
-                min_lrn_rate=0.0001,
-                lrn_rate=0.1,
-                num_residual_units=5,
-                use_bottleneck=False,
-                weight_decay_rate=0.0002,
-                relu_leakiness=0.1,
-                optimizer=optimizer,
-                num_gpus=num_gpus
+            batch_size=batch_size,
+            num_classes=num_classes,
+            min_lrn_rate=0.0001,
+            lrn_rate=0.1,
+            num_residual_units=5,
+            use_bottleneck=False,
+            weight_decay_rate=0.0002,
+            relu_leakiness=0.1,
+            optimizer=optimizer,
+            num_gpus=num_gpus
         )
         self.dataset = dataset
-        self.x = tf.placeholder(tf.float32, [self.hps.batch_size, dataset.width, dataset.height, dataset.channels])
-        self.y_ = tf.placeholder(tf.float32, [self.hps.batch_size, num_classes])
+        self.x = tf.placeholder(tf.float32, [
+                                self.hps.batch_size, dataset.width, dataset.height, dataset.channels])
+        self.y_ = tf.placeholder(
+            tf.float32, [self.hps.batch_size, num_classes])
         self.mode = mode
 
         self.sess = tf.Session(
@@ -66,7 +68,8 @@ class ResNet(object):
             self._build_train_op()
         else:
             # Additional initialization for the test network.
-            self.variables = tf_variables.TensorFlowVariables(self.cost, self.sess)
+            self.variables = tf_variables.TensorFlowVariables(
+                self.cost, self.sess)
             self.summaries = tf.summary.merge_all()
         self.sess.run(tf.global_variables_initializer())
 
@@ -246,7 +249,7 @@ class ResNet(object):
                 orig_x = tf.pad(
                     orig_x, [[0, 0], [0, 0], [0, 0],
                              [(out_filter - in_filter) // 2,
-                             (out_filter - in_filter) // 2]])
+                              (out_filter - in_filter) // 2]])
             x += orig_x
 
         return x
@@ -333,7 +336,7 @@ class ResNet(object):
 
     def batch_normalization(self, x, y):
         return self.sess.run([self._extra_train_ops], feed_dict={self.x: x,
-                                        self.y_: y})
+                                                                 self.y_: y})
 
     def apply_gradients(self, gradients):
         feed_dict = {}
@@ -345,37 +348,3 @@ class ResNet(object):
         return self.sess.run([self.cost, self.accuracy],
                              feed_dict={self.x: x,
                                         self.y_: y})
-
-
-if __name__ == '__main__':
-    import mpi_dataset
-    logging.basicConfig(level=logging.INFO)
-
-    batch_size = 128
-
-    dataset = mpi_dataset.download_cifar10_retry(0)
-    net = ResNet(dataset, batch_size)
-
-    i = 0
-    from myutils import Timer
-
-    timer = Timer()
-    print("Iteration, time, loss, accuracy")
-    while True:
-        # Compute and apply gradients.
-        for _ in range(10):
-
-            xs, ys = dataset.train.next_batch(batch_size)
-            gradients = net.compute_gradients(xs, ys)
-            net.apply_gradients(gradients)
-            net.batch_normalization(xs, ys)
-
-            if i % 10 == 0:
-                # Evaluate the current model.
-                test_xs, test_ys = dataset.test.next_batch(batch_size)
-                loss, accuracy = net.compute_loss_accuracy(test_xs, test_ys)
-                valid_xs, valid_ys = dataset.valid.next_batch(batch_size)
-                valid_loss, valid_accuracy = net.compute_loss_accuracy(valid_xs, valid_ys)
-                print("%d, %.3f, %.3f, %.3f, %.3f, %.3f" %
-                      (i, timer.toc(), loss, accuracy, valid_loss, valid_accuracy))
-            i += 1
