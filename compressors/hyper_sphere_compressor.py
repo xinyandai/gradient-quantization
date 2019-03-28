@@ -3,7 +3,7 @@ import numpy as np
 from scipy import stats
 from utils.vecs_io import fvecs_read
 from utils.vec_np import normalize
-
+from .probabilistic_compressor import ProbabilisticCompressor
 
 class HyperSphereCompressor(object):
     def __init__(self, size, shape, c_dim=32, k=64):
@@ -21,6 +21,7 @@ class HyperSphereCompressor(object):
         self.codewords = torch.from_numpy(self.codewords).cuda()
         self.c_dagger = torch.from_numpy(self.c_dagger).cuda()
         self.code_dtype = torch.uint8 if self.K <= 2 ** 8 else torch.int32
+        self.norm_compressor = ProbabilisticCompressor(2 ** 6)
 
     def compress(self, vec):
 
@@ -40,12 +41,16 @@ class HyperSphereCompressor(object):
 
         selected_p = p.gather(dim=1, index=codes.view(-1, 1))
         u = torch.mul(torch.sign(selected_p.view(-1)), l1_norms.view(-1))
+        u = self.norm_compressor.compress(u)
         return [u, codes.type(self.code_dtype)]
 
     def decompress(self, signature):
         [norms, codes] = signature
+        norms = self.norm_compressor.decompress(norms)
+
         codes = codes.view(-1).type(torch.long)
         norms = norms.view(-1)
+
         vec = self.codewords[codes]
         recover = torch.mul(vec, norms.view(-1, 1).expand_as(vec))
         return recover.view(self.shape)

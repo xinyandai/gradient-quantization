@@ -2,6 +2,7 @@ from .base_quantizer import BaseQuantizer
 import torch
 import numpy as np
 from compressors import QSGDCompressor
+from compressors import IdenticalCompressor 
 
 
 class QSGDQuantizer(BaseQuantizer):
@@ -10,25 +11,24 @@ class QSGDQuantizer(BaseQuantizer):
         self.num_layers = len(self.parameters)
         self.compressors = list()
         self.compressed_gradients = [list() for _ in range(self.num_layers)]
+
         for param in self.parameters:
+            param_size = param.flatten().shape[0]
             self.compressors.append(
-                QSGDCompressor(
-                    param.flatten().shape[0],
-                    param.shape
-                )
+                QSGDCompressor(param_size, param.shape) if param_size > 1000 \
+                else IdenticalCompressor()
             )
 
     def record(self):
         for i, param in enumerate(self.parameters):
             self.compressed_gradients[i].append(
-                self.compressors[i].compress(param.grad.data.cpu().numpy()))
+                self.compressors[i].compress(param.grad.data))
 
     def apply(self):
         for i, param in enumerate(self.parameters):
             decompressed_gradients = [self.compressors[i].decompress(
                 compressed) for compressed in self.compressed_gradients[i]]
-            param.grad.data = torch.from_numpy(
-                np.stack(decompressed_gradients, axis=0).mean(axis=0)).cuda()
+            param.grad.data = torch.stack(decompressed_gradients, dim=0).mean(dim=0)
         for compressed in self.compressed_gradients:
             compressed.clear()
 

@@ -1,5 +1,5 @@
 import torch
-# from .base_quantizer import BaseQuantizer
+from compressors import IdenticalCompressor
 from compressors.nearest_neighbor_compressor import NearestNeighborCompressor
 
 
@@ -10,11 +10,10 @@ class NearestNeighborQuantizer(object):
         self.compressors = list()
         self.compressed_gradients = [list() for _ in range(self.num_layers)]
         for param in self.parameters:
+            param_size = param.flatten().shape[0]
             self.compressors.append(
-                NearestNeighborCompressor(
-                    param.flatten().shape[0],
-                    param.shape
-                )
+                NearestNeighborCompressor(param_size, param.shape) if param_size > 1000 \
+                else IdenticalCompressor()
             )
 
     def record(self):

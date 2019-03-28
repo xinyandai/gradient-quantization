@@ -1,27 +1,28 @@
-import numpy as np
+import torch
 
 
 class ProbabilisticCompressor(object):
     def __init__(self, s):
         self.s = s
+        self.code_dtype = torch.uint8 if self.s <= 2 ** 8 else torch.int32
         self.random = True
 
     def compress(self, vec):
-        lower_bound = np.min(vec)
-        upper_bound = np.max(vec)
+        lower_bound = torch.min(vec)
+        upper_bound = torch.max(vec)
         if lower_bound - upper_bound == 0.0:
-            return lower_bound, upper_bound, np.zeros_like(vec).astype(np.int32)
-        scaled_vec = np.abs((vec - lower_bound) / (upper_bound - lower_bound)) * self.s
-        l = np.array(scaled_vec).clip(0, self.s-1).astype(dtype=np.int32)
+            return lower_bound, upper_bound, torch.zeros_like(vec).astype(torch.int32)
+        scaled_vec = torch.abs((vec - lower_bound) / (upper_bound - lower_bound)) * self.s
+        l = torch.clamp(scaled_vec, 0, self.s-1).type(dtype=self.code_dtype)
 
         if self.random:
             # l[i] <- l[i] + 1 with probability |v_i| / ||v|| * s - l
-            probabilities = scaled_vec - l
-            l[:] += probabilities > np.random.uniform(0, 1, l.shape)
+            probabilities = scaled_vec - l.type(torch.float32)
+            l[:] += probabilities > torch.rand(l.size()).cuda()
         return lower_bound, upper_bound, l
 
     def decompress(self, signature):
         [lower_bound, upper_bound, l] = signature
-        scaled_vec = l.astype(dtype=np.float32)
+        scaled_vec = l.type(dtype=torch.float32)
         compressed = scaled_vec / self.s * (upper_bound - lower_bound) + lower_bound
         return compressed
