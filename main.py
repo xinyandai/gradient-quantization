@@ -5,12 +5,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
-from models import CNN, ResNet18
-from quantizers import SGDQuantizer
-from quantizers import HyperSphereQuantizer
-from quantizers import QSGDQuantizer
-from quantizers import NearestNeighborQuantizer
-from dataloaders import minst, cifar10
+
+from quantizers import *
+from dataloaders import minst, cifar10, cifar100
+
+from models import CNN
+from models import densenet_cifar
+from models import vgg11, vgg13, vgg16, vgg19
+from models import ResNet18, ResNet34, ResNet50, ResNet101, ResNet152
 from logger import Logger
 
 
@@ -20,48 +22,54 @@ DATASET_LOADER = cifar10
 LOSS_FUNC = nn.CrossEntropyLoss()
 LOGGER = None
 
+quantizer_choices = {
+    'sgd': SGDQuantizer,
+    'qsgd': QSGDQuantizer,
+    'hsq': HyperSphereQuantizer,
+    'nnq': NearestNeighborQuantizer,
+    'rq': ResidualQuantizer
+}
+network_choices = {
+    'resnet18' : ResNet18,
+    'resnet34': ResNet34,
+    'resnet50': ResNet50,
+    'resnet101': ResNet101,
+    'resnet152': ResNet152,
+    'vgg11' : vgg11,
+    'vgg13': vgg13,
+    'vgg16': vgg16,
+    'vgg19': vgg19,
+    'dense': densenet_cifar
+}
+
+data_loaders = {'mnist': minst, 'cifar10': cifar10, 'cifar100': cifar100}
+classes_choices = {'mnist': 10, 'cifar10': 10, 'cifar100': 100}
+
 
 def get_config(args):
     global QUANTIZER
     global LOGGER
     global NETWORK
     global DATASET_LOADER
-    if args.quantizer == 'sgd':
-        QUANTIZER = SGDQuantizer
-    elif args.quantizer == 'qsgd':
-        QUANTIZER = QSGDQuantizer
-    elif args.quantizer == 'hsq':
-        QUANTIZER = HyperSphereQuantizer
-    elif args.quantizer == 'nnq':
-        QUANTIZER = NearestNeighborQuantizer
-    else:
-        assert False, "no quantizer {}".format(args.quantizer)
+
+    QUANTIZER = quantizer_choices[args.quantizer]
+    NETWORK = network_choices[args.network]
+    DATASET_LOADER = data_loaders[args.dataset]
+    args.num_classes = classes_choices[args.dataset]
 
     if args.save_log != None:
         LOGGER = Logger(args.save_log)
-
-    if args.network == 'resnet':
-        NETWORK = ResNet18
-    elif args.network == 'cnn':
-        NETWORK = CNN
-    else:
-        assert False, "no network {}".format(args.network)
-
-    if args.dataset == 'cifar10':
-        DATASET_LOADER = cifar10
-    elif args.dataset == 'mnist':
-        DATASET_LOADER = minst
-    else:
-        assert False, "no dataset {}".format(args.dataset)
 
 
 def main():
     # Training settings
     parser = argparse.ArgumentParser(
         description='Gradient Quantization Samples')
-    parser.add_argument('--network', type=str, default='resnet')
-    parser.add_argument('--dataset', type=str, default='cifar10')
-    parser.add_argument('--quantizer', type=str, default='hsq')
+    parser.add_argument('--network', type=str, default='resnet18', choices=network_choices.keys())
+    parser.add_argument('--dataset', type=str, default='cifar10', choices=data_loaders.keys())
+    parser.add_argument('--num_classes', type=int, default=10, choices=classes_choices.values())
+    parser.add_argument('--quantizer', type=str, default='hsq', choices=quantizer_choices.keys()
+                        )
     parser.add_argument('--num-users', type=int, default=8, metavar='N',
                         help='num of users for training (default: 8)')
     parser.add_argument('--save-log', type=str, default=None,
@@ -72,8 +80,7 @@ def main():
                         help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=350, metavar='N',
                         help='number of epochs to train (default: 350)')
-    # parser.add_argument('--lr', type=float, default=0.1, metavar='LR',
-    #                     help='learning rate (default: 0.1)')
+
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
@@ -94,13 +101,13 @@ def main():
 
     # kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     train_loader, test_loader = DATASET_LOADER(args)
-    model = NETWORK().to(device)
+    model = NETWORK(num_classes=args.num_classes).to(device)
     quantizer = QUANTIZER(model.parameters())
     optimizer = optim.SGD(model.parameters(), lr=0.1,
                           momentum=args.momentum, weight_decay=5e-4)
 
-    epochs = [51, 101, 201]
-    lrs = [0.01, 0.001, 0.0005]
+    epochs = [51, 71]
+    lrs = [0.01, 0.001]
 
     for epoch in range(1, args.epochs + 1):
         for i_epoch, i_lr in zip(epochs, lrs):

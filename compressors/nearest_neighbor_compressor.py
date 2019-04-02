@@ -7,7 +7,7 @@ from utils.vec_np import normalize
 
 
 class NearestNeighborCompressor(object):
-    def __init__(self, size, shape, c_dim=32, k=256):
+    def __init__(self, size, shape, c_dim=32, k=256, compressed_norm=True):
         self.size = size
         self.shape = shape
         self.dim = c_dim if c_dim < size else size
@@ -24,7 +24,9 @@ class NearestNeighborCompressor(object):
         self.c_dagger = torch.from_numpy(self.c_dagger).cuda()
         self.code_dtype = torch.uint8 if self.K <= 2 ** 8 else torch.int32
 
-        self.norm_compressor = ProbabilisticCompressor(2 ** 6)
+        self.compressed_norm = compressed_norm
+        if self.compressed_norm:
+            self.norm_compressor = ProbabilisticCompressor(2 ** 6)
 
     def compress(self, vec):
 
@@ -33,20 +35,24 @@ class NearestNeighborCompressor(object):
         # calculate probability, complexity: O(d*K)
         # p = torch.mm(self.c_dagger, vec.transpose(0, 1)).transpose(0, 1)
         p = torch.mm(self.codewords, vec.transpose(0, 1)).transpose(0, 1)
-        norms = torch.norm(vec, dim=1)
+        # norms = torch.norm(vec, dim=1)
         probability = torch.abs(p)
 
         # choose codeword
         codes = torch.argmax(probability, dim=1)
 
         u = p.gather(dim=1, index=codes.view(-1, 1)).view(-1)
-        u = torch.sign(u) * norms
-        u = self.norm_compressor.compress(u)
+        # u = torch.sign(u) * norms
+
+        if self.compressed_norm:
+            u = self.norm_compressor.compress(u)
+
         return [u, codes.type(self.code_dtype)]
 
     def decompress(self, signature):
         [norms, codes] = signature
-        norms =  self.norm_compressor.decompress(norms)
+        if self.compressed_norm:
+            norms =  self.norm_compressor.decompress(norms)
 
         codes = codes.view(-1).type(torch.long)
         norms = norms.view(-1)
