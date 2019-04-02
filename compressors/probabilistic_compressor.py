@@ -2,10 +2,12 @@ import torch
 
 
 class ProbabilisticCompressor(object):
-    def __init__(self, s):
-        self.s = s
-        self.code_dtype = torch.uint8 if self.s <= 2 ** 8 else torch.int32
-        self.random = True
+    def __init__(self, n_bit, args):
+        self.s = 2 ** n_bit
+        self.cuda = not args.no_cuda
+        self.code_dtype = torch.uint8 if n_bit <= 8 else torch.int32
+        self.random = args.random
+
 
     def compress(self, vec):
         lower_bound = torch.min(vec)
@@ -18,7 +20,10 @@ class ProbabilisticCompressor(object):
         if self.random:
             # l[i] <- l[i] + 1 with probability |v_i| / ||v|| * s - l
             probabilities = scaled_vec - l.type(torch.float32)
-            l[:] += probabilities > torch.rand(l.size()).cuda()
+            r = torch.rand(l.size())
+            if self.cuda:
+                r = r.cuda()
+            l[:] += probabilities > r
         return lower_bound, upper_bound, l
 
     def decompress(self, signature):

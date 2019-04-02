@@ -2,17 +2,21 @@ import torch
 
 
 class QSGDCompressor(object):
-    def __init__(self, size, shape, c_dim=256, s=256, random=True):
-        self.random = random
-        self.s = s
+    def __init__(self, size, shape, args):
+        self.random = args.random
+        self.bit = args.n_bit
+        assert self.bit > 0
+
+        self.cuda = not args.no_cuda
+        self.s = 2 ** self.bit
         self.size = size
         self.shape = shape
-        self.dim = c_dim if self.size >= (4096*2) else self.size
+        self.dim = args.c_dim if self.size >= (4096*2) else self.size
         self.M = size // self.dim
-        self.code_dtype = torch.uint8 if self.s <= 2 ** 8 else torch.int32
+        self.code_dtype = torch.uint8 if self.bit <= 8 else torch.int32
         assert size % self.dim == 0, \
-            "dimension of variable {} {} should be smaller than {} or dividable by {}".format(
-                shape, size, self.dim, self.dim)
+            "dimension of variable {} {} should be smaller than " \
+            "{} or dividable by {}".format(shape, size, self.dim, self.dim)
 
     def compress(self, vec):
         """
@@ -29,7 +33,10 @@ class QSGDCompressor(object):
         if self.random:
             # l[i] <- l[i] + 1 with probability |v_i| / ||v|| * s - l
             probabilities = scaled_vec - l.type(torch.float32)
-            l[:] += probabilities > torch.rand(l.size()).cuda()
+            r = torch.rand(l.size())
+            if self.cuda:
+                r = r.cuda()
+            l[:] += probabilities > r
 
         signs = torch.sign(vec) > 0
         return [norm, signs.view(self.shape), l.view(self.shape)]

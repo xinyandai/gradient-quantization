@@ -6,24 +6,38 @@ from utils.vec_np import normalize
 from .probabilistic_compressor import ProbabilisticCompressor
 
 class HyperSphereCompressor(object):
-    def __init__(self, size, shape, c_dim=32, k=64, compressed_norm=True):
+    def __init__(self, size, shape, args):
+        c_dim = args.c_dim
+        k_bit = args.k_bit
+        n_bit = args.n_bit
+        compressed_norm = n_bit != 32
+        assert c_dim > 0
+        assert k_bit > 0
+        assert n_bit > 0
+
+        self.cuda = not args.no_cuda
         self.size = size
         self.shape = shape
         self.dim = c_dim if c_dim < size else size
-        self.K = k
+        self.K = 2 ** k_bit
         if self.K == self.dim:
             self.codewords = stats.ortho_group.rvs(self.dim).astype(np.float32)
         else:
-            _, self.codewords = normalize(fvecs_read(
-                './codebook/angular_dim_{}_Ks_{}.fvecs'.format(self.dim, self.K)))
+            location = './codebook/angular_dim_{}_Ks_{}.fvecs'.format(self.dim, self.K)
+            _, self.codewords = normalize(fvecs_read(location))
         self.c_dagger = np.linalg.pinv(self.codewords.T)
 
-        self.codewords = torch.from_numpy(self.codewords).cuda()
-        self.c_dagger = torch.from_numpy(self.c_dagger).cuda()
-        self.code_dtype = torch.uint8 if self.K <= 2 ** 8 else torch.int32
+        self.codewords = torch.from_numpy(self.codewords)
+        self.c_dagger = torch.from_numpy(self.c_dagger)
+
+        if self.cuda:
+            self.codewords = self.codewords.cuda()
+            self.c_dagger = self.c_dagger.cuda()
+
+        self.code_dtype = torch.uint8 if k_bit <=  8 else torch.int32
         self.compressed_norm = compressed_norm
         if self.compressed_norm:
-            self.norm_compressor = ProbabilisticCompressor(2 ** 6)
+            self.norm_compressor = ProbabilisticCompressor(n_bit, args)
 
     def compress(self, vec):
 
@@ -35,7 +49,9 @@ class HyperSphereCompressor(object):
         probability = torch.abs(p) / l1_norms
 
         # choose codeword with probability
-        r = torch.rand(probability.size()[0]).cuda()
+        r = torch.rand(probability.size()[0])
+        if self.cuda:
+            r = r.cuda()
         rs = r.view(-1, 1).expand_as(probability)
 
         comp = torch.cumsum(probability, dim=1) >= rs-(1e-5)

@@ -6,7 +6,8 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 
-from quantizers import *
+from compressors import *
+from quantizers import Quantizer
 from dataloaders import minst, cifar10, cifar100
 
 from models import CNN
@@ -16,19 +17,20 @@ from models import ResNet18, ResNet34, ResNet50, ResNet101, ResNet152
 from logger import Logger
 
 
-NETWORK = ResNet18
-QUANTIZER = HyperSphereQuantizer
-DATASET_LOADER = cifar10
-LOSS_FUNC = nn.CrossEntropyLoss()
+NETWORK = None
+Compressor = None
+DATASET_LOADER = None
 LOGGER = None
+LOSS_FUNC = nn.CrossEntropyLoss()
 
 quantizer_choices = {
-    'sgd': SGDQuantizer,
-    'qsgd': QSGDQuantizer,
-    'hsq': HyperSphereQuantizer,
-    'nnq': NearestNeighborQuantizer,
-    'rq': ResidualQuantizer
+    'sgd': IdenticalCompressor,
+    'qsgd': QSGDCompressor,
+    'hsq': HyperSphereCompressor,
+    'nnq': NearestNeighborCompressor,
+    'rq': NearestNeighborCompressor
 }
+
 network_choices = {
     'resnet18' : ResNet18,
     'resnet34': ResNet34,
@@ -47,18 +49,22 @@ classes_choices = {'mnist': 10, 'cifar10': 10, 'cifar100': 100}
 
 
 def get_config(args):
-    global QUANTIZER
+    global Compressor
     global LOGGER
     global NETWORK
     global DATASET_LOADER
 
-    QUANTIZER = quantizer_choices[args.quantizer]
+    Compressor = quantizer_choices[args.quantizer]
     NETWORK = network_choices[args.network]
     DATASET_LOADER = data_loaders[args.dataset]
     args.num_classes = classes_choices[args.dataset]
 
-    if args.save_log != None:
-        LOGGER = Logger(args.save_log)
+    log = 'logs/{}/{}/{}_d{}_k{}_n{}_u{}'.format(
+        args.network, args.dataset, args.quantizer,
+        args.c_dim, args.k_bit, args.n_bit, args.num_users)
+    LOGGER = Logger(log if args.logdir is None else args.logdir)
+
+    args.no_cuda = args.no_cuda or not torch.cuda.is_available()
 
 
 def main():
@@ -67,12 +73,17 @@ def main():
         description='Gradient Quantization Samples')
     parser.add_argument('--network', type=str, default='resnet18', choices=network_choices.keys())
     parser.add_argument('--dataset', type=str, default='cifar10', choices=data_loaders.keys())
-    parser.add_argument('--num_classes', type=int, default=10, choices=classes_choices.values())
-    parser.add_argument('--quantizer', type=str, default='hsq', choices=quantizer_choices.keys()
-                        )
+    parser.add_argument('--num-classes', type=int, default=10, choices=classes_choices.values())
+    parser.add_argument('--quantizer', type=str, default='hsq', choices=quantizer_choices.keys())
+
+    parser.add_argument('--c-dim', type=int, default=32, choices=[2**i for i in range(16)])
+    parser.add_argument('--k-bit', type=int, default=8)
+    parser.add_argument('--n-bit', type=int, default=8)
+    parser.add_argument('--random', type=int, default=True)
+
     parser.add_argument('--num-users', type=int, default=8, metavar='N',
                         help='num of users for training (default: 8)')
-    parser.add_argument('--save-log', type=str, default=None,
+    parser.add_argument('--logdir', type=str, default=None,
                         help='For Saving the logs')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                         help='input batch size for training (default: 64)')
@@ -95,14 +106,13 @@ def main():
     args = parser.parse_args()
     get_config(args)
 
-    use_cuda = not args.no_cuda and torch.cuda.is_available()
     torch.manual_seed(args.seed)
-    device = torch.device("cuda" if use_cuda else "cpu")
+    device = torch.device("cpu" if args.no_cuda else "cuda")
 
     # kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     train_loader, test_loader = DATASET_LOADER(args)
     model = NETWORK(num_classes=args.num_classes).to(device)
-    quantizer = QUANTIZER(model.parameters())
+    quantizer = Quantizer(Compressor, model.parameters(), args)
     optimizer = optim.SGD(model.parameters(), lr=0.1,
                           momentum=args.momentum, weight_decay=5e-4)
 

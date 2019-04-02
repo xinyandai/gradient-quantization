@@ -5,16 +5,10 @@ from .nearest_neighbor_compressor import NearestNeighborCompressor
 
 
 class ResidualCompressor(object):
-    def __init__(self, size, shape, c_dim=64, k=256, compressed_norm=True):
-        self.size = size
-        self.shape = shape
-        self.dim = c_dim if c_dim < size else size
-        self.K = k
+    def __init__(self, size, shape, args):
         self.compressors = [
-            NearestNeighborCompressor(
-                size=size, shape=shape, c_dim=c_dim, k=k, compressed_norm=compressed_norm),
-            HyperSphereCompressor(
-                size=size, shape=shape, c_dim=c_dim, k=k, compressed_norm=compressed_norm),
+            NearestNeighborCompressor(size, shape, args),
+            HyperSphereCompressor(size, shape, args),
         ]
 
 
