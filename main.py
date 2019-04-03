@@ -7,13 +7,10 @@ import torch.optim as optim
 from torchvision import datasets, transforms
 
 from compressors import *
-from quantizers import Quantizer
-from dataloaders import minst, cifar10, cifar100
+from dataloaders import *
+from quantizers import *
 
-from models import CNN
-from models import densenet_cifar
-from models import vgg11, vgg13, vgg16, vgg19
-from models import ResNet18, ResNet34, ResNet50, ResNet101, ResNet152
+from models import *
 from logger import Logger
 
 
@@ -44,8 +41,21 @@ network_choices = {
     'dense': densenet_cifar
 }
 
-data_loaders = {'mnist': minst, 'cifar10': cifar10, 'cifar100': cifar100}
-classes_choices = {'mnist': 10, 'cifar10': 10, 'cifar100': 100}
+data_loaders = {
+    'mnist': minst,
+    'cifar10': cifar10,
+    'cifar100': cifar100,
+    'stl10': stl10,
+    'svhn': svhn,
+}
+
+classes_choices = {
+    'mnist': 10,
+    'cifar10': 10,
+    'cifar100': 100,
+    'stl10': 10,
+    'svhn': 10,
+}
 
 
 def get_config(args):
