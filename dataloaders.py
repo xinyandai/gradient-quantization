@@ -9,13 +9,13 @@ def minst(args):
                            transforms.ToTensor(),
                            transforms.Normalize((0.1307,), (0.3081,))
                        ])),
-        batch_size=args.batch_size*args.num_users, shuffle=True, **kwargs)
+        batch_size=args.batch_size*args.num_users, shuffle=True,)
     test_loader = torch.utils.data.DataLoader(
         datasets.MNIST('./data', train=False, transform=transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.1307,), (0.3081,))
         ])),
-        batch_size=args.test_batch_size, shuffle=True, **kwargs)
+        batch_size=args.test_batch_size, shuffle=True,)
     return train_loader, test_loader
 
 
@@ -126,3 +126,38 @@ def svhn(args):
     test_loader = torch.utils.data.DataLoader(
         testset, args.test_batch_size, shuffle=False, num_workers=2)
     return train_loader, test_loader
+
+
+def tinyimgnet(args):
+
+    traindir = './tinyimgnet/train'
+    testdir = './tinyimgnet/val'
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+
+    train_dataset = datasets.ImageFolder(
+        traindir,
+        transforms.Compose([
+            transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            normalize,
+        ])
+    )
+    train_sampler = None
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=args.batch_size*args.num_users, shuffle=(train_sampler is None),
+        num_workers=8, pin_memory=True, sampler=train_sampler)
+
+    test_loader = torch.utils.data.DataLoader(
+        datasets.ImageFolder(testdir, transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,
+        ])),
+        batch_size=args.test_batch_size, shuffle=False,
+        num_workers=8, pin_memory=True)
+
+    return train_loader, test_loader
+

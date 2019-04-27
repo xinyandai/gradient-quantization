@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 
+
 from compressors import *
 from dataloaders import *
 from quantizers import *
@@ -15,7 +16,7 @@ from logger import Logger
 
 
 NETWORK = None
-Compressor = None
+COMPRESSOR = None
 DATASET_LOADER = None
 LOGGER = None
 LOSS_FUNC = nn.CrossEntropyLoss()
@@ -25,7 +26,8 @@ quantizer_choices = {
     'qsgd': QSGDCompressor,
     'hsq': HyperSphereCompressor,
     'nnq': NearestNeighborCompressor,
-    'rq': NearestNeighborCompressor
+    'rq': NearestNeighborCompressor,
+    'sign': SignSGDCompressor
 }
 
 network_choices = {
@@ -38,7 +40,8 @@ network_choices = {
     'vgg13': vgg13,
     'vgg16': vgg16,
     'vgg19': vgg19,
-    'dense': densenet_cifar
+    'dense': densenet_cifar,
+    'fcn' : FCN
 }
 
 data_loaders = {
@@ -47,6 +50,7 @@ data_loaders = {
     'cifar100': cifar100,
     'stl10': stl10,
     'svhn': svhn,
+    'tinyimg': tinyimgnet
 }
 
 classes_choices = {
@@ -55,23 +59,27 @@ classes_choices = {
     'cifar100': 100,
     'stl10': 10,
     'svhn': 10,
+    'tinyimg': 200
 }
 
 
 def get_config(args):
-    global Compressor
+    global COMPRESSOR
     global LOGGER
     global NETWORK
     global DATASET_LOADER
 
-    Compressor = quantizer_choices[args.quantizer]
+    COMPRESSOR = quantizer_choices[args.quantizer]
     NETWORK = network_choices[args.network]
     DATASET_LOADER = data_loaders[args.dataset]
     args.num_classes = classes_choices[args.dataset]
 
-    log = 'logs/{}/{}/{}_d{}_k{}_n{}_u{}'.format(
-        args.network, args.dataset, args.quantizer,
-        args.c_dim, args.k_bit, args.n_bit, args.num_users)
+    log = 'logs/{}/{}/{}_d{}_k{}_n{}_u{}_b{}_log_{}'.format(
+        args.network, args.dataset, args.quantizer, args.c_dim, args.k_bit,
+        args.n_bit, args.num_users, args.batch_size, args.log_epoch
+    )
+    if args.two_phase:
+        log = log + "_two_phase"
     LOGGER = Logger(log if args.logdir is None else args.logdir)
 
     args.no_cuda = args.no_cuda or not torch.cuda.is_available()
@@ -108,10 +116,12 @@ def main():
                         help='disables CUDA training')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
-    parser.add_argument('--log-interval', type=int, default=10, metavar='N',
-                        help='how many batches to wait before logging training status')
+    parser.add_argument('--log-epoch', type=int, default=1, metavar='N',
+                        help='logging training status at each epoch')
     parser.add_argument('--save-model', action='store_true', default=False,
                         help='For Saving the current Model')
+    parser.add_argument('--two-phase', action='store_true', default=False,
+                        help='For Compression two phases')
 
     args = parser.parse_args()
     get_config(args)
@@ -119,17 +129,26 @@ def main():
     torch.manual_seed(args.seed)
     device = torch.device("cpu" if args.no_cuda else "cuda")
 
-    # kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
     train_loader, test_loader = DATASET_LOADER(args)
     model = NETWORK(num_classes=args.num_classes).to(device)
-    quantizer = Quantizer(Compressor, model.parameters(), args)
+    quantizer = Quantizer(COMPRESSOR, model.parameters(), args)
     optimizer = optim.SGD(model.parameters(), lr=0.1,
                           momentum=args.momentum, weight_decay=5e-4)
 
-    epochs = [51, 71]
-    lrs = [0.01, 0.001]
+    if args.dataset == 'mnist':
+        epochs = []
+        lrs = []
+        args.epochs = 20
+    elif args.dataset == 'tinyimg':
+        epochs = [51]
+        lrs = [0.01]
+        args.epochs = 1000
+    else:
+        epochs = [51, 71]
+        lrs = [0.01, 0.005]
+        args.epochs = 150
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(1, args.epochs + 2):
         for i_epoch, i_lr in zip(epochs, lrs):
             if epoch == i_epoch:
                 optimizer = optim.SGD(model.parameters(), lr=i_lr,
@@ -153,6 +172,7 @@ def train(args, model, device, train_loader, test_loader, optimizer, quantizer, 
     train_data = list()
     iteration = len(train_loader.dataset)//(num_users*batch_size) + \
         int(len(train_loader.dataset) % (num_users*batch_size) != 0)
+    log_interval = [iteration // args.log_epoch * (i+1) for i in range(args.log_epoch)]
     # here the real batch size is (num_users * batch_size)
     for batch_idx, (data, target) in enumerate(train_loader):
         user_batch_size = len(data) // num_users
@@ -166,11 +186,14 @@ def train(args, model, device, train_loader, test_loader, optimizer, quantizer, 
 
         loss = one_iter(model, device, LOSS_FUNC, optimizer,
                         quantizer, train_data, num_users)
-        if batch_idx % args.log_interval == 0:
+        if (batch_idx+1) in log_interval:
             test_accuracy = test(args, model, device, test_loader)
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\t Test Accuracy: {:.2f}%'.format(
-                epoch, batch_idx * len(data), len(train_loader.dataset),
-                100. * batch_idx / len(train_loader), loss.item(),
+                epoch,
+                batch_idx * num_users * batch_size + len(data),
+                len(train_loader.dataset),
+                100. * batch_idx / len(train_loader),
+                loss.item(),
                 test_accuracy*100))
 
             info = {'loss': loss.item(), 'accuracy(%)': test_accuracy*100}
@@ -241,3 +264,4 @@ def origin_train(args, model, device, train_loader, optimizer, epoch):
 
 if __name__ == "__main__":
     main()
+
