@@ -5,18 +5,39 @@ class QSGDCompressor(object):
     def __init__(self, size, shape, args):
         self.random = args.random
         self.bit = args.n_bit
+        c_dim = args.c_dim
         assert self.bit > 0
 
         self.cuda = not args.no_cuda
         self.s = 2 ** self.bit
         self.size = size
         self.shape = shape
-        self.dim = args.c_dim if self.size >= (4096*2) else self.size
+
+        if c_dim == 0 or self.size < args.c_dim:
+            self.dim = self.size
+        else:
+            self.dim = c_dim
+            for i in range(0, 10):
+                if size % self.dim != 0:
+                    self.dim = self.dim // 2 * 3
+
+        if c_dim != self.dim:
+            print("alternate dimension form"
+                  " {} to {}, size {} shape {}"
+                  .format(c_dim, self.dim, size, shape))
+
+        assert self.dim != 0, \
+            "0 sub dimension size {}  " \
+            "c_dim {} self.dim {}"\
+                .format(size, c_dim, self.dim)
+        assert size % self.dim == 0, \
+            "not divisible size {} " \
+            " c_dim {} self.dim {}"\
+                .format(size, c_dim, self.dim)
+
         self.M = size // self.dim
         self.code_dtype = torch.uint8 if self.bit <= 8 else torch.int32
-        assert size % self.dim == 0, \
-            "dimension of variable {} {} should be smaller than " \
-            "{} or dividable by {}".format(shape, size, self.dim, self.dim)
+
 
     def compress(self, vec):
         """
@@ -24,7 +45,8 @@ class QSGDCompressor(object):
         :return: norm, signs, quantized_intervals
         """
         vec = vec.view(-1, self.dim)
-        norm = torch.norm(vec, dim=1, keepdim=True)
+        # norm = torch.norm(vec, dim=1, keepdim=True)
+        norm = torch.max(torch.abs(vec), dim=1, keepdim=True)[0]
         normalized_vec = vec / norm
 
         scaled_vec = torch.abs(normalized_vec) * self.s

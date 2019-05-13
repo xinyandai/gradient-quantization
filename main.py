@@ -94,7 +94,7 @@ def main():
     parser.add_argument('--num-classes', type=int, default=10, choices=classes_choices.values())
     parser.add_argument('--quantizer', type=str, default='hsq', choices=quantizer_choices.keys())
 
-    parser.add_argument('--c-dim', type=int, default=32, choices=[2**i for i in range(16)])
+    parser.add_argument('--c-dim', type=int, default=32)
     parser.add_argument('--k-bit', type=int, default=8)
     parser.add_argument('--n-bit', type=int, default=8)
     parser.add_argument('--random', type=int, default=True)
@@ -112,6 +112,8 @@ def main():
 
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                         help='SGD momentum (default: 0.9)')
+    parser.add_argument('--weight-decay', type=float, default=5e-4, metavar='M',
+                        help='weight decay momentum (default: 5e-4)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA training')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
@@ -123,6 +125,7 @@ def main():
     parser.add_argument('--two-phase', action='store_true', default=False,
                         help='For Compression two phases')
 
+
     args = parser.parse_args()
     get_config(args)
 
@@ -133,7 +136,7 @@ def main():
     model = NETWORK(num_classes=args.num_classes).to(device)
     quantizer = Quantizer(COMPRESSOR, model.parameters(), args)
     optimizer = optim.SGD(model.parameters(), lr=0.1,
-                          momentum=args.momentum, weight_decay=5e-4)
+                          momentum=args.momentum, weight_decay=args.weight_decay)
 
     if args.dataset == 'mnist':
         epochs = []
@@ -147,6 +150,15 @@ def main():
         epochs = [51, 71]
         lrs = [0.01, 0.005]
         args.epochs = 150
+
+    if COMPRESSOR == SignSGDCompressor:
+        epochs = [51, 71]
+        lrs = [0.0005, 0.0001]
+        args.epochs = 150
+        args.momentum = 0.0
+        args.weight_decay = 0.1
+        optimizer = optim.SGD(model.parameters(), lr=1e-3,
+                          momentum=args.momentum, weight_decay=args.weight_decay)
 
     for epoch in range(1, args.epochs + 2):
         for i_epoch, i_lr in zip(epochs, lrs):
