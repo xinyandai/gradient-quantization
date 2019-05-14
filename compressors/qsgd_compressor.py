@@ -36,7 +36,7 @@ class QSGDCompressor(object):
                 .format(size, c_dim, self.dim)
 
         self.M = size // self.dim
-        self.code_dtype = torch.uint8 if self.bit <= 8 else torch.int32
+        self.code_dtype = torch.int32
 
 
     def compress(self, vec):
@@ -58,7 +58,7 @@ class QSGDCompressor(object):
             r = torch.rand(l.size())
             if self.cuda:
                 r = r.cuda()
-            l[:] += probabilities > r
+            l[:] += (probabilities > r).type(self.code_dtype)
 
         signs = torch.sign(vec) > 0
         return [norm, signs.view(self.shape), l.view(self.shape)]
