@@ -1,7 +1,7 @@
 import torch
 
 
-class ProbabilisticCompressor(object):
+class ProbabilisticScalarCompressor(object):
     def __init__(self, n_bit, args):
         self.s = 2 ** n_bit
         self.cuda = not args.no_cuda

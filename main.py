@@ -1,10 +1,6 @@
 import argparse
 from datetime import datetime
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from torchvision import datasets, transforms
 
 
 from compressors import *
@@ -15,51 +11,49 @@ from models import *
 from logger import Logger
 
 
-NETWORK = None
-COMPRESSOR = None
-DATASET_LOADER = None
-LOGGER = None
-LOSS_FUNC = nn.CrossEntropyLoss()
+NETWORK         = None
+COMPRESSOR      = None
+DATASET_LOADER  = None
+LOGGER          = None
+LOSS_FUNC       = nn.CrossEntropyLoss()
 
 quantizer_choices = {
-    'sgd': IdenticalCompressor,
+    'sgd':  IdenticalCompressor,
     'qsgd': QSGDCompressor,
-    'hsq': HyperSphereCompressor,
-    'nnq': NearestNeighborCompressor,
-    'rq': NearestNeighborCompressor,
+    'hsq':  NearestNeighborCompressor,
     'sign': SignSGDCompressor
 }
 
 network_choices = {
-    'resnet18' : ResNet18,
-    'resnet34': ResNet34,
-    'resnet50': ResNet50,
-    'resnet101': ResNet101,
-    'resnet152': ResNet152,
-    'vgg11' : vgg11,
-    'vgg13': vgg13,
-    'vgg16': vgg16,
-    'vgg19': vgg19,
-    'dense': densenet_cifar,
-    'fcn' : FCN
+    'resnet18'  : ResNet18,
+    'resnet34'  : ResNet34,
+    'resnet50'  : ResNet50,
+    'resnet101' : ResNet101,
+    'resnet152' : ResNet152,
+    'vgg11'     : vgg11,
+    'vgg13'     : vgg13,
+    'vgg16'     : vgg16,
+    'vgg19'     : vgg19,
+    'dense'     : densenet_cifar,
+    'fcn'       : FCN
 }
 
 data_loaders = {
-    'mnist': minst,
-    'cifar10': cifar10,
+    'mnist':    minst,
+    'cifar10':  cifar10,
     'cifar100': cifar100,
-    'stl10': stl10,
-    'svhn': svhn,
-    'tinyimg': tinyimgnet
+    'stl10':    stl10,
+    'svhn':     svhn,
+    'tinyimg':  tinyimgnet
 }
 
 classes_choices = {
-    'mnist': 10,
-    'cifar10': 10,
+    'mnist':    10,
+    'cifar10':  10,
     'cifar100': 100,
-    'stl10': 10,
-    'svhn': 10,
-    'tinyimg': 200
+    'stl10':    10,
+    'svhn':     10,
+    'tinyimg':  200
 }
 
 
@@ -74,13 +68,9 @@ def get_config(args):
     DATASET_LOADER = data_loaders[args.dataset]
     args.num_classes = classes_choices[args.dataset]
 
-    log = 'logs/{}/{}/{}_d{}_k{}_n{}_u{}_b{}_log_{}'.format(
-        args.network, args.dataset, args.quantizer, args.c_dim, args.k_bit,
-        args.n_bit, args.num_users, args.batch_size, args.log_epoch
-    )
-    if args.two_phase:
-        log = log + "_two_phase"
-    LOGGER = Logger(log if args.logdir is None else args.logdir)
+    if args.logdir is None:
+        assert False, "The logdir is not defined"
+    LOGGER = Logger(args.logdir)
 
     args.no_cuda = args.no_cuda or not torch.cuda.is_available()
 
@@ -103,8 +93,8 @@ def main():
                         help='num of users for training (default: 8)')
     parser.add_argument('--logdir', type=str, default=None,
                         help='For Saving the logs')
-    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
-                        help='input batch size for training (default: 64)')
+    parser.add_argument('--batch-size', type=int, default=32, metavar='N',
+                        help='input batch size for training (default: 32)')
     parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
                         help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=350, metavar='N',

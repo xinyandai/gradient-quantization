@@ -3,9 +3,9 @@ import numpy as np
 from scipy import stats
 from utils.vecs_io import fvecs_read
 from utils.vec_np import normalize
-from .probabilistic_compressor import ProbabilisticCompressor
+from .probabilistic_scalar_compressor import ProbabilisticScalarCompressor
 
-class HyperSphereCompressor(object):
+class ProbabilisticVectorCompressor(object):
     def __init__(self, size, shape, args):
         c_dim = args.c_dim
         k_bit = args.k_bit
@@ -37,7 +37,7 @@ class HyperSphereCompressor(object):
         self.code_dtype = torch.uint8 if k_bit <=  8 else torch.int32
         self.compressed_norm = compressed_norm
         if self.compressed_norm:
-            self.norm_compressor = ProbabilisticCompressor(n_bit, args)
+            self.norm_compressor = ProbabilisticScalarCompressor(n_bit, args)
 
     def compress(self, vec):
 

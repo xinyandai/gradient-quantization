@@ -25,7 +25,9 @@ def tabulate_events(dpath):
             assert len(set(e.step for e in events)) == 1
 
             out[tag].append([e.value for e in events])
-
+    max_ = np.min([len(out[tag]) for tag in tags])
+    for tag in tags:
+        out[tag] = out[tag][:max_]
     return out, steps
 
 
@@ -49,7 +51,7 @@ def get_file_path(dpath, tag):
     return os.path.join(folder_path, file_name)
 
 
-if __name__ == '__main__':
+def convert_all():
     path = "logs"
     for model in os.listdir(path):
         model_path = path + "/" + model
@@ -57,8 +59,20 @@ if __name__ == '__main__':
             dateset_path = model_path + "/" + dateset
             for quantizer in os.listdir(dateset_path):
                 quantizer_path = dateset_path + "/" + quantizer
-                if os.listdir(quantizer_path):
-                    print(quantizer_path)
+                try:
+                    if os.listdir(quantizer_path):
+                        # print(quantizer_path)
+                        shutil.rmtree(quantizer_path+"/csv", ignore_errors=True)
+                        to_csv(quantizer_path)
+                except:
+                    print("error {}".format(quantizer_path))
 
-                    shutil.rmtree(quantizer_path+"/csv", ignore_errors=True)
-                    to_csv(quantizer_path)
+
+def convert(quantizer_path):
+    shutil.rmtree(quantizer_path + "/csv", ignore_errors=True)
+    to_csv(quantizer_path)
+
+# convert("logs/vgg19/cifar10/nnq_d8_k8_n6_u8_b32_log_1")
+# convert("logs/resnet101/cifar10/sgd_d32_k8_n6_u8_b32_log_1")
+# convert("logs/resnet101/cifar10/qsgd_d0_k8_n1_u8_b32_log_1")
+convert_all()

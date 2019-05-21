@@ -1,6 +1,6 @@
 from .identical_compressor import IdenticalCompressor
 from .qsgd_compressor import QSGDCompressor
-from .hyper_sphere_compressor import HyperSphereCompressor
+from .probabilistic_vector_compressor import ProbabilisticVectorCompressor
 from .nearest_neighbor_compressor import NearestNeighborCompressor
 from .residual_compressor import ResidualCompressor
 from .signsgd_compressor import SignSGDCompressor

@@ -1,6 +1,6 @@
 import torch
 
-from .hyper_sphere_compressor import HyperSphereCompressor
+from .probabilistic_vector_compressor import ProbabilisticVectorCompressor
 from .nearest_neighbor_compressor import NearestNeighborCompressor
 
 
@@ -8,7 +8,7 @@ class ResidualCompressor(object):
     def __init__(self, size, shape, args):
         self.compressors = [
             NearestNeighborCompressor(size, shape, args),
-            HyperSphereCompressor(size, shape, args),
+            ProbabilisticVectorCompressor(size, shape, args),
         ]
 
 

@@ -4,7 +4,7 @@ from scipy import stats
 
 from utils.vecs_io import fvecs_read
 from utils.vec_np import normalize
-from .probabilistic_compressor import ProbabilisticCompressor
+from .probabilistic_scalar_compressor import ProbabilisticScalarCompressor
 
 class NearestNeighborCompressor(object):
     def __init__(self, size, shape, args):
@@ -47,7 +47,8 @@ class NearestNeighborCompressor(object):
             # self.codewords = np.identity(self.dim, dtype=np.float32)
             # self.codewords = normalize(np.random.normal(size=(self.dim, self.dim)))[1].astype(np.float32)
         else:
-            location = './new_codebook/angular_dim_{}_Ks_{}.fvecs'.format(self.dim, self.K)
+            location = './codebooks/learned_codebook/' \
+                       'angular_dim_{}_Ks_{}.fvecs'.format(self.dim, self.K)
             _, self.codewords = normalize(fvecs_read(location))
 
         self.codewords = torch.from_numpy(self.codewords)
@@ -57,7 +58,7 @@ class NearestNeighborCompressor(object):
 
         self.compressed_norm = compressed_norm
         if self.compressed_norm:
-            self.norm_compressor = ProbabilisticCompressor(n_bit, args)
+            self.norm_compressor = ProbabilisticScalarCompressor(n_bit, args)
 
     def compress(self, vec):
 
