@@ -21,7 +21,8 @@ quantizer_choices = {
     'sgd':  IdenticalCompressor,
     'qsgd': QSGDCompressor,
     'hsq':  NearestNeighborCompressor,
-    'sign': SignSGDCompressor
+    'sign': SignSGDCompressor,
+    'topk': TopKSparsificationCompressor,
 }
 
 network_choices = {
@@ -106,6 +107,8 @@ def main():
                         help='weight decay momentum (default: 5e-4)')
     parser.add_argument('--no-cuda', action='store_true', default=False,
                         help='disables CUDA training')
+    parser.add_argument('--ef', action='store_true', default=False,
+                        help='enable error feedback')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
     parser.add_argument('--log-epoch', type=int, default=1, metavar='N',
@@ -221,7 +224,7 @@ def one_iter(model, device, loss_func, optimizer, quantizer, train_data, num_use
         # print(loss)
         all_losses.append(loss)
         loss.backward()
-        quantizer.record()
+        quantizer.record(user_id)
     quantizer.apply()
     optimizer.step()
     return torch.stack(all_losses).mean()

@@ -4,3 +4,5 @@ from .probabilistic_vector_compressor import ProbabilisticVectorCompressor
 from .nearest_neighbor_compressor import NearestNeighborCompressor
 from .residual_compressor import ResidualCompressor
 from .signsgd_compressor import SignSGDCompressor
+from .maurey_sparsification import MaureySparsification
+from .topk_sparsification_compressor import TopKSparsificationCompressor
