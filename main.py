@@ -84,6 +84,7 @@ def main():
     parser.add_argument('--dataset', type=str, default='cifar10', choices=data_loaders.keys())
     parser.add_argument('--num-classes', type=int, default=10, choices=classes_choices.values())
     parser.add_argument('--quantizer', type=str, default='hsq', choices=quantizer_choices.keys())
+    parser.add_argument('--mode', type=str, default='ps', choices=['ps', 'ring'])
 
     parser.add_argument('--c-dim', type=int, default=32)
     parser.add_argument('--k-bit', type=int, default=8)
