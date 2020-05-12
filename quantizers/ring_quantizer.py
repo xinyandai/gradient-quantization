@@ -1,4 +1,6 @@
+import math
 import torch
+
 from compressors import IdenticalCompressor
 
 class RingQuantizer():
@@ -19,12 +21,16 @@ class RingQuantizer():
                 param.error = [torch.zeros_like(param)
                                for _ in range(args.num_users)]
 
-    def record(self, user):
+    def record(self, user, epoch):
+        if self.args.scale == 'exp':
+            scale = (2 / (math.exp(-epoch) + 1) - 1)
+        else:
+            scale = float(self.args.scale)
         for i, param in enumerate(self.parameters):
             if user != 0:
                 param.grad.data.add_(self.compressed_gradients[i][-1])
             if self.error_feedback:
-                param.grad.data.add_(param.error[user])
+                param.grad.data.add_(scale * param.error[user])
                 decompressed_g = self.compressors[i].decompress(
                     self.compressors[i].compress(param.grad.data)
                 )

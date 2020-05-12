@@ -11,8 +11,9 @@ class TopKSparsificationCompressor(object):
         self.cuda = not args.no_cuda
         self.size = size
         self.shape = shape
-        self.users = args.num_users
-        self.k = size // 100
+        self.users = 1
+        # self.k = size // 146 // 2
+        self.k = size // args.cr 
 
     def compress(self, vec):
         vec = vec.view(self.users, -1)
@@ -22,4 +23,4 @@ class TopKSparsificationCompressor(object):
         return vec * ind
 
     def decompress(self, signature):
-        return signature
+        return signature.view(self.shape)

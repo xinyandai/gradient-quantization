@@ -1,3 +1,4 @@
+import math
 import torch
 from compressors import IdenticalCompressor
 
@@ -22,10 +23,15 @@ class PSQuantizer():
             if self.error_feedback and self.two_phase:
                 param.server_error = torch.zeros_like(param)
 
-    def record(self, user):
+    def record(self, user, epoch):
+        if self.args.scale == 'exp':
+            scale = (2 / (math.exp(-epoch) + 1) - 1)
+        else:
+            scale = float(self.args.scale)
+
         for i, param in enumerate(self.parameters):
             if self.error_feedback:
-                param.grad.data.add_(param.error[user])
+                param.grad.data.add_(scale * param.error[user])
                 decompressed_g = self.compressors[i].decompress(
                     self.compressors[i].compress(param.grad.data)
                 )

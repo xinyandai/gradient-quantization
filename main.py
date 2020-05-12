@@ -85,10 +85,12 @@ def main():
     parser.add_argument('--num-classes', type=int, default=10, choices=classes_choices.values())
     parser.add_argument('--quantizer', type=str, default='hsq', choices=quantizer_choices.keys())
     parser.add_argument('--mode', type=str, default='ps', choices=['ps', 'ring'])
+    parser.add_argument('--scale', type=str, default="exp")
 
     parser.add_argument('--c-dim', type=int, default=32)
     parser.add_argument('--k-bit', type=int, default=8)
     parser.add_argument('--n-bit', type=int, default=8)
+    parser.add_argument('--cr', type=int, default=256)
     parser.add_argument('--random', type=int, default=True)
 
     parser.add_argument('--num-users', type=int, default=8, metavar='N',
@@ -163,7 +165,7 @@ def main():
         train(args, model, device, train_loader, test_loader,
               optimizer, quantizer, epoch)
         # origin_train(args, model, device, train_loader, optimizer, epoch)
-        # test(args, model, device, test_loader)
+        # test(args, model, model, test_loader)
 
     if args.save_model:
         filename = "saved_{}_{}.pt".format(args.network, datetime.now())
@@ -191,7 +193,7 @@ def train(args, model, device, train_loader, test_loader, optimizer, quantizer, 
                            target[(num_users-1)*user_batch_size:]))
 
         loss = one_iter(model, device, LOSS_FUNC, optimizer,
-                        quantizer, train_data, num_users)
+                        quantizer, train_data, num_users, epoch=epoch)
         if (batch_idx+1) in log_interval:
             test_accuracy = test(args, model, device, test_loader)
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\t Test Accuracy: {:.2f}%'.format(
@@ -211,7 +213,7 @@ def train(args, model, device, train_loader, test_loader, optimizer, quantizer, 
     print('Train Epoch: {} Done.\tLoss: {:.6f}'.format(epoch, loss.item()))
 
 
-def one_iter(model, device, loss_func, optimizer, quantizer, train_data, num_users):
+def one_iter(model, device, loss_func, optimizer, quantizer, train_data, num_users, epoch):
     assert num_users == len(train_data)
     model.train()
     user_gradients = [list() for _ in model.parameters()]
@@ -225,7 +227,7 @@ def one_iter(model, device, loss_func, optimizer, quantizer, train_data, num_use
         # print(loss)
         all_losses.append(loss)
         loss.backward()
-        quantizer.record(user_id)
+        quantizer.record(user_id, epoch=epoch)
     quantizer.apply()
     optimizer.step()
     return torch.stack(all_losses).mean()

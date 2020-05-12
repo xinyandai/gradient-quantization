@@ -75,4 +75,9 @@ def convert(quantizer_path):
 # convert("logs/vgg19/cifar10/nnq_d8_k8_n6_u8_b32_log_1")
 # convert("logs/resnet101/cifar10/sgd_d32_k8_n6_u8_b32_log_1")
 # convert("logs/resnet101/cifar10/qsgd_d0_k8_n1_u8_b32_log_1")
-convert_all()
+if __name__ == "__main__":
+    import sys
+    if (len(sys.argv)) > 1:
+        convert(sys.argv[1])
+    else:
+        convert_all()
