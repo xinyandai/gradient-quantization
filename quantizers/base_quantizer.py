@@ -7,4 +7,4 @@ def Quantizer(Compressor, parameters, args):
         return PSQuantizer(Compressor, parameters, args)
     elif args.mode == 'ring':
         return RingQuantizer(Compressor, parameters, args)
-    assert False
+    assert False, "mode {} not recognized".format(args.mode)

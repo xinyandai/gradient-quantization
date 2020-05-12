@@ -3,6 +3,7 @@ import torch
 
 from compressors import IdenticalCompressor
 
+
 class RingQuantizer():
     def __init__(self, Compressor, parameters, args):
         self.parameters = list(parameters)

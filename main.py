@@ -121,7 +121,6 @@ def main():
     parser.add_argument('--two-phase', action='store_true', default=False,
                         help='For Compression two phases')
 
-
     args = parser.parse_args()
     get_config(args)
 
@@ -154,7 +153,8 @@ def main():
         args.momentum = 0.0
         args.weight_decay = 0.1
         optimizer = optim.SGD(model.parameters(), lr=1e-3,
-                          momentum=args.momentum, weight_decay=args.weight_decay)
+                              momentum=args.momentum,
+                              weight_decay=args.weight_decay)
 
     for epoch in range(1, args.epochs + 2):
         for i_epoch, i_lr in zip(epochs, lrs):

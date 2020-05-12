@@ -2,6 +2,7 @@ import math
 import torch
 from compressors import IdenticalCompressor
 
+
 class PSQuantizer():
     def __init__(self, Compressor, parameters, args):
         self.parameters = list(parameters)
@@ -41,8 +42,6 @@ class PSQuantizer():
                     self.compressors[i].compress(param.grad.data)
                 )
             self.compressed_gradients[i].append(decompressed_g)
-
-
 
     def apply(self):
         for i, param in enumerate(self.parameters):
